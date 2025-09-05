@@ -10,10 +10,10 @@ plugins {
 android {
     signingConfigs {
         create("defaultSignature") {
-            storeFile = file(project.findProperty("StoreFile") ?: "testkey.jks")
-            storePassword = (project.findProperty("StorePassword") as String?) ?: "testkey"
-            keyPassword = (project.findProperty("KeyPassword") as String?) ?: "testkey"
-            keyAlias = (project.findProperty("KeyAlias") as String?) ?: "testkey"
+            storeFile = file(project.findProperty("StoreFile") ?: "naq_owndroid.jks")
+            storePassword = (project.findProperty("StorePassword") as String?) ?: "naq_owndroid"
+            keyPassword = (project.findProperty("KeyPassword") as String?) ?: "naq_owndroid"
+            keyAlias = (project.findProperty("KeyAlias") as String?) ?: "naq_owndroid"
         }
     }
     namespace = "com.bintianqi.owndroid"
