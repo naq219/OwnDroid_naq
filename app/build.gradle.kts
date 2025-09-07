@@ -24,7 +24,7 @@ android {
 
     defaultConfig {
         applicationId = "com.bintianqi.owndroid"
-        minSdk = 21
+        minSdk = 22
         targetSdk = 36
         versionCode = 40
         versionName = "7.1"
@@ -32,6 +32,7 @@ android {
     }
 
     buildTypes {
+
         release {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -84,6 +85,11 @@ gradle.taskGraph.whenReady {
 
 dependencies {
     implementation(libs.androidx.activity.compose)
+    // For Preferences DataStore
+    implementation("androidx.datastore:datastore-preferences:1.1.1") // Or the latest version
+
+    // For Proto DataStore (if you're using that instead)
+    // implementation("androidx.datastore:datastore-core:1.1.1")
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui.tooling.preview)
     debugImplementation(libs.androidx.compose.ui.tooling)
@@ -93,6 +99,7 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.shizuku.provider)
     implementation(libs.shizuku.api)
+
     implementation(libs.dhizuku.api)
     implementation(libs.dhizuku.server.api)
     implementation(libs.androidx.fragment)

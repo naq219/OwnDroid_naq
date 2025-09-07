@@ -1,7 +1,12 @@
 package com.bintianqi.owndroid
 
+import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
+import android.content.Context
+import android.os.Build
 import android.os.Build.VERSION
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -49,6 +54,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.preferencesDataStore
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -236,26 +244,98 @@ import com.bintianqi.owndroid.dpm.WorkProfile
 import com.bintianqi.owndroid.dpm.WorkProfileScreen
 import com.bintianqi.owndroid.dpm.dhizukuErrorStatus
 import com.bintianqi.owndroid.ui.Animations
+import com.bintianqi.owndroid.ui.RandomPasswordScreen
 import com.bintianqi.owndroid.ui.theme.OwnDroidTheme
+import kotlinx.coroutines.flow.first
 import kotlinx.serialization.Serializable
 import java.util.Locale
 
+
+private val Context.dataStore by preferencesDataStore("app_prefs")
+private val FIRST_RUN_KEY = booleanPreferencesKey("first_run")
+
+suspend fun isFirstRun(context: Context): Boolean {
+    val prefs = context.dataStore.data.first()
+    return prefs[FIRST_RUN_KEY] ?: true
+}
+
+suspend fun setFirstRunDone(context: Context) {
+    context.dataStore.edit { prefs ->
+        prefs[FIRST_RUN_KEY] = false
+    }
+}
+
 @ExperimentalMaterial3Api
 class MainActivity : FragmentActivity() {
+    private lateinit var dpm: DevicePolicyManager
+    private lateinit var adminComponent: ComponentName
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+
+        dpm = getSystemService(DEVICE_POLICY_SERVICE) as DevicePolicyManager
+        adminComponent = ComponentName(applicationContext, Receiver::class.java)
+
+        // 1. Chặn gỡ cài đặt app
+       try {
+           if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+               val pkg = "dnsfilter.android"
+
+               dpm.setUninstallBlocked(adminComponent, packageName, true)
+
+//               dpm.setUninstallBlocked(adminComponent, pkg, true)
+//
+//
+//               // Disable user control cho dnsfilter.android mỗi khi vào app
+//
+//               val current = Privilege.DPM.getUserControlDisabledPackages(Privilege.DAR)
+//               if (!current.contains(pkg)) {
+//                   Privilege.DPM.setUserControlDisabledPackages(
+//                       Privilege.DAR,
+//                       current.plus(pkg)
+//                   )
+//               }
+           }
+
+
+
+       }catch (e: Exception){
+            Log.e("MainActivity", "onCreate: ", e)
+       }
+
+//        // 2. Bật Lock Task / Kiosk Mode
+//        dpm.setLockTaskPackages(adminComponent, arrayOf(packageName))
+//        startLockTask()
+
+
         val context = applicationContext
         val locale = context.resources?.configuration?.locale
         zhCN = locale == Locale.SIMPLIFIED_CHINESE || locale == Locale.CHINESE || locale == Locale.CHINA
         val vm by viewModels<MyViewModel>()
         setContent {
             var appLockDialog by rememberSaveable { mutableStateOf(false) }
+            var showRandomPasswordScreen by rememberSaveable { mutableStateOf(true) }
             val theme by vm.theme.collectAsStateWithLifecycle()
+            LaunchedEffect(Unit) {
+                if (isFirstRun(applicationContext)) {
+                    showRandomPasswordScreen = false // lần đầu không hiển thị
+                    setFirstRunDone(applicationContext)
+
+
+
+                } else {
+                    showRandomPasswordScreen = true // các lần sau hiển thị màn hình mật khẩu
+                }
+            }
+
             OwnDroidTheme(theme) {
-                Home(vm) { appLockDialog = true }
-                if (appLockDialog) {
-                    AppLockDialog({ appLockDialog = false }) { moveTaskToBack(true) }
+                if (showRandomPasswordScreen) {
+                    RandomPasswordScreen { showRandomPasswordScreen = false }
+                } else {
+                    Home(vm) { appLockDialog = true }
+                    if (appLockDialog) {
+                        AppLockDialog({ appLockDialog = false }) { moveTaskToBack(true) }
+                    }
                 }
             }
         }
@@ -497,7 +577,10 @@ private fun HomeScreen(onNavigate: (Any) -> Unit) {
         },
         contentWindowInsets = WindowInsets.ime
     ) {
-        Column(Modifier.fillMaxSize().padding(it).verticalScroll(rememberScrollState())) {
+        Column(Modifier
+            .fillMaxSize()
+            .padding(it)
+            .verticalScroll(rememberScrollState())) {
             if(privilege.device || privilege.profile) {
                 HomePageItem(R.string.system, R.drawable.android_fill0) { onNavigate(SystemManager) }
                 HomePageItem(R.string.network, R.drawable.wifi_fill0) { onNavigate(Network) }
