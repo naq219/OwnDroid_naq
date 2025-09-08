@@ -1,8 +1,11 @@
 package com.bintianqi.owndroid.ui
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -12,16 +15,18 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.bintianqi.owndroid.R
 import kotlinx.serialization.Serializable
 import kotlin.random.Random
@@ -29,43 +34,76 @@ import kotlin.random.Random
 @Serializable
 object RandomPasswordScreen
 
+private const val TOTAL_ATTEMPTS = 30
+
 @Composable
 fun RandomPasswordScreen(onSucceed: () -> Unit) {
-    val focusMgr = LocalFocusManager.current
+    val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
     var randomString by remember { mutableStateOf("") }
     var input by remember { mutableStateOf("") }
     var isError by remember { mutableStateOf(false) }
+    var successfulAttempts by remember { mutableIntStateOf(0) }
+    var attemptsMessage by remember { mutableStateOf("") }
 
-    // Tạo chuỗi ngẫu nhiên khi màn hình được tạo
+    fun generateNewChallenge() {
+        randomString = generateRandomString(10)
+        input = ""
+        isError = false
+        if (successfulAttempts < TOTAL_ATTEMPTS) {
+            attemptsMessage = context.getString(R.string.random_password_attempts_remaining, TOTAL_ATTEMPTS - successfulAttempts)
+        }
+    }
+
     DisposableEffect(Unit) {
-        randomString = generateRandomString(3)
+        generateNewChallenge()
         onDispose { }
     }
 
     fun checkPassword() {
         if (input == randomString) {
-            focusMgr.clearFocus()
-            onSucceed()
+            successfulAttempts++
+            if (successfulAttempts >= TOTAL_ATTEMPTS) {
+                focusManager.clearFocus()
+                onSucceed()
+            } else {
+                generateNewChallenge()
+            }
         } else {
             isError = true
+            attemptsMessage = context.getString(R.string.random_password_incorrect_try_again)
         }
     }
 
     Column(
         modifier = Modifier
-            .fillMaxWidth()
+            .fillMaxSize()
             .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
     ) {
         Text(
+            text = context.getString(R.string.random_password_title),
+            fontSize = 20.sp,
+            modifier = Modifier.padding(bottom = 24.dp)
+        )
+
+        Text(
             text = randomString,
-            modifier = Modifier.padding(top = 50.dp, bottom = 24.dp)
+            fontSize = 24.sp,
+            modifier = Modifier.padding(bottom = 24.dp)
         )
 
         OutlinedTextField(
             value = input,
-            onValueChange = { input = it; isError = false },
-             label = { Text("Enter random string") },
+            onValueChange = {
+                input = it
+                isError = false
+                 if (attemptsMessage == context.getString(R.string.random_password_incorrect_try_again)) {
+                    attemptsMessage = context.getString(R.string.random_password_attempts_remaining, TOTAL_ATTEMPTS - successfulAttempts)
+                }
+            },
+            label = { Text(context.getString(R.string.random_password_input_label)) },
             isError = isError,
             modifier = Modifier.fillMaxWidth(),
             keyboardOptions = KeyboardOptions(
@@ -75,34 +113,30 @@ fun RandomPasswordScreen(onSucceed: () -> Unit) {
             keyboardActions = KeyboardActions(onDone = { checkPassword() })
         )
 
-        Spacer(modifier = Modifier.padding(vertical = 16.dp))
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = attemptsMessage,
+            modifier = Modifier.padding(bottom = 16.dp),
+            fontSize = 14.sp
+        )
 
         Button(
             onClick = { checkPassword() },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            enabled = input.isNotBlank()
         ) {
-            Text("Xác Minh")
+            Text(context.getString(R.string.random_password_verify_button))
         }
     }
 }
 
-/**
- * Tạo chuỗi ngẫu nhiên với độ dài cho trước
- * Chuỗi bao gồm chữ cái viết hoa và chữ số
- * Cứ mỗi 20 ký tự sẽ có một dấu gạch dưới (_)
- */
 private fun generateRandomString(length: Int): String {
     val allowedChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
     val random = Random
-
     return buildString {
         for (i in 1..length) {
-            // Thêm dấu gạch dưới sau mỗi 20 ký tự (trừ ký tự cuối cùng)
-            if (i % 20 == 0 && i != length) {
-                append('_')
-            } else {
-                append(allowedChars[random.nextInt(allowedChars.length)])
-            }
+            append(allowedChars[random.nextInt(allowedChars.length)])
         }
     }
 }

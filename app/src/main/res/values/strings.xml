@@ -736,4 +736,11 @@
     <string name="activate_method">Activate method</string>
     <string name="adb_command">ADB command</string>
     <string name="owndroid_warning">This app uses Device owner or Profile owner privileges. These privileges are extremely dangerous, please use them with caution. If used improperly, they may result in severe losses. The developers will not be responsible for this.</string>
+    <!-- Other strings -->
+    <string name="random_password_attempts_remaining">Attempts remaining: %1$d</string>
+    <!-- You might also need this if it's not already defined -->
+    <string name="random_password_incorrect_try_again">Incorrect, please try again.</string>
+    <string name="random_password_title">Enter the characters</string>
+    <string name="random_password_input_label">Input</string>
+    <string name="random_password_verify_button">Verify</string>
 </resources>
