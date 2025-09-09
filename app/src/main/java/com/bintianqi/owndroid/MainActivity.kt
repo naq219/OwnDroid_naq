@@ -314,28 +314,14 @@ class MainActivity : FragmentActivity() {
         val vm by viewModels<MyViewModel>()
         setContent {
             var appLockDialog by rememberSaveable { mutableStateOf(false) }
-            var showRandomPasswordScreen by rememberSaveable { mutableStateOf(true) }
             val theme by vm.theme.collectAsStateWithLifecycle()
-            LaunchedEffect(Unit) {
-                if (isFirstRun(applicationContext)) {
-                    showRandomPasswordScreen = false // lần đầu không hiển thị
-                    setFirstRunDone(applicationContext)
-
-
-
-                } else {
-                    showRandomPasswordScreen = true // các lần sau hiển thị màn hình mật khẩu
-                }
-            }
+            // Luôn vào thẳng Home. Đăng nhập sẽ được yêu cầu khi truy cập từng mục cụ thể (System/Network)
+            LaunchedEffect(Unit) { setFirstRunDone(applicationContext) }
 
             OwnDroidTheme(theme) {
-                if (showRandomPasswordScreen) {
-                    RandomPasswordScreen { showRandomPasswordScreen = false }
-                } else {
-                    Home(vm) { appLockDialog = true }
-                    if (appLockDialog) {
-                        AppLockDialog({ appLockDialog = false }) { moveTaskToBack(true) }
-                    }
+                Home(vm) { appLockDialog = true }
+                if (appLockDialog) {
+                    AppLockDialog({ appLockDialog = false }) { moveTaskToBack(true) }
                 }
             }
         }
@@ -376,6 +362,52 @@ fun Home(vm: MyViewModel, onLock: () -> Unit) {
         popExitTransition = Animations.navHostPopExitTransition
     ) {
         composable<Home> { HomeScreen(::navigate) }
+        composable<AuthGate> {
+            val args = it.toRoute<AuthGate>()
+            RandomPasswordScreen {
+                when(args.target) {
+                    "system" -> {
+                        navController.navigate(SystemManager) {
+                            popUpTo<AuthGate> { inclusive = true }
+                        }
+                    }
+                    "network" -> {
+                        navController.navigate(Network) {
+                            popUpTo<AuthGate> { inclusive = true }
+                        }
+                    }
+
+                    "users" -> {
+                        navController.navigate(Users) {
+                            popUpTo<AuthGate> { inclusive = true }
+                        }
+                    }
+                    "password" -> {
+                        navController.navigate(Password) {
+                            popUpTo<AuthGate> { inclusive = true }
+                        }
+                    }
+
+                    "work_profile" -> {
+                        navController.navigate(WorkProfile) {
+                            popUpTo<AuthGate> { inclusive = true }
+                        }
+                    }
+                    
+                    "user_restriction" -> {
+                        navController.navigate(UserRestriction) {
+                            popUpTo<AuthGate> { inclusive = true }
+                        }
+                    }
+                    "users_options" -> {
+                        navController.navigate(UsersOptions) {
+                            popUpTo<AuthGate> { inclusive = true }
+                        }
+                    }
+                    else -> navController.navigate(Home) { popUpTo<AuthGate> { inclusive = true } }
+                }
+            }
+        }
         composable<WorkModes> {
             WorkModesScreen(it.toRoute(), ::navigateUp, {
                 navController.navigate(Home) {
@@ -557,6 +589,7 @@ fun Home(vm: MyViewModel, onLock: () -> Unit) {
 }
 
 @Serializable private object Home
+@Serializable private data class AuthGate(val target: String)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -582,8 +615,8 @@ private fun HomeScreen(onNavigate: (Any) -> Unit) {
             .padding(it)
             .verticalScroll(rememberScrollState())) {
             if(privilege.device || privilege.profile) {
-                HomePageItem(R.string.system, R.drawable.android_fill0) { onNavigate(SystemManager) }
-                HomePageItem(R.string.network, R.drawable.wifi_fill0) { onNavigate(Network) }
+                HomePageItem(R.string.system, R.drawable.android_fill0) { onNavigate(AuthGate("system")) }
+                HomePageItem(R.string.network, R.drawable.wifi_fill0) { onNavigate(AuthGate("network")) }
             }
             if(privilege.work) {
                 HomePageItem(R.string.work_profile, R.drawable.work_fill0) {
