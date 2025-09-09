@@ -343,6 +343,15 @@ fun Home(vm: MyViewModel, onLock: () -> Unit) {
     fun navigateUp() { navController.navigateUp() }
     fun navigate(destination: Any) { navController.navigate(destination) }
     LaunchedEffect(Unit) {
+        // 1) Require login on app open if last auth older than 1 hour
+        val needsLogin = System.currentTimeMillis() - SP.lastAuthTime >= 60 * 60 * 1000
+        if (needsLogin) {
+            navController.navigate(Login) {
+                popUpTo<Home> { inclusive = true }
+            }
+            return@LaunchedEffect
+        }
+        // 2) If privilege not activated, go to WorkModes
         if(!Privilege.status.value.activated) {
             navController.navigate(WorkModes(false)) {
                 popUpTo<Home> { inclusive = true }
@@ -362,49 +371,10 @@ fun Home(vm: MyViewModel, onLock: () -> Unit) {
         popExitTransition = Animations.navHostPopExitTransition
     ) {
         composable<Home> { HomeScreen(::navigate) }
-        composable<AuthGate> {
-            val args = it.toRoute<AuthGate>()
+        composable<Login> {
             RandomPasswordScreen {
-                when(args.target) {
-                    "system" -> {
-                        navController.navigate(SystemManager) {
-                            popUpTo<AuthGate> { inclusive = true }
-                        }
-                    }
-                    "network" -> {
-                        navController.navigate(Network) {
-                            popUpTo<AuthGate> { inclusive = true }
-                        }
-                    }
-
-                    "users" -> {
-                        navController.navigate(Users) {
-                            popUpTo<AuthGate> { inclusive = true }
-                        }
-                    }
-                    "password" -> {
-                        navController.navigate(Password) {
-                            popUpTo<AuthGate> { inclusive = true }
-                        }
-                    }
-
-                    "work_profile" -> {
-                        navController.navigate(WorkProfile) {
-                            popUpTo<AuthGate> { inclusive = true }
-                        }
-                    }
-                    
-                    "user_restriction" -> {
-                        navController.navigate(UserRestriction) {
-                            popUpTo<AuthGate> { inclusive = true }
-                        }
-                    }
-                    "users_options" -> {
-                        navController.navigate(UsersOptions) {
-                            popUpTo<AuthGate> { inclusive = true }
-                        }
-                    }
-                    else -> navController.navigate(Home) { popUpTo<AuthGate> { inclusive = true } }
+                navController.navigate(Home) {
+                    popUpTo<Login> { inclusive = true }
                 }
             }
         }
@@ -558,8 +528,9 @@ fun Home(vm: MyViewModel, onLock: () -> Unit) {
     }
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
+            val needsLogin = System.currentTimeMillis() - SP.lastAuthTime >= 60 * 60 * 1000
             if (
-                (event == Lifecycle.Event.ON_CREATE && !SP.lockPasswordHash.isNullOrEmpty()) ||
+                (event == Lifecycle.Event.ON_CREATE && needsLogin && !SP.lockPasswordHash.isNullOrEmpty()) ||
                 (event == Lifecycle.Event.ON_RESUME && SP.lockWhenLeaving)
             ) {
                 onLock()
@@ -589,7 +560,7 @@ fun Home(vm: MyViewModel, onLock: () -> Unit) {
 }
 
 @Serializable private object Home
-@Serializable private data class AuthGate(val target: String)
+@Serializable private object Login
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -615,8 +586,8 @@ private fun HomeScreen(onNavigate: (Any) -> Unit) {
             .padding(it)
             .verticalScroll(rememberScrollState())) {
             if(privilege.device || privilege.profile) {
-                HomePageItem(R.string.system, R.drawable.android_fill0) { onNavigate(AuthGate("system")) }
-                HomePageItem(R.string.network, R.drawable.wifi_fill0) { onNavigate(AuthGate("network")) }
+                HomePageItem(R.string.system, R.drawable.android_fill0) { onNavigate(SystemManager) }
+                HomePageItem(R.string.network, R.drawable.wifi_fill0) { onNavigate(Network) }
             }
             if(privilege.work) {
                 HomePageItem(R.string.work_profile, R.drawable.work_fill0) {

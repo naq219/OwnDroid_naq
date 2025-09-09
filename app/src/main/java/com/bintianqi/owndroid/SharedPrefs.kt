@@ -25,6 +25,8 @@ class SharedPrefs(context: Context) {
     var applicationsListView by BooleanSharedPref("applications.list_view", true)
     var shortcuts by BooleanSharedPref("shortcuts")
     var dhizukuServer by BooleanSharedPref("dhizuku_server")
+    // Timestamp (ms) of last successful login/authentication
+    var lastAuthTime by LongSharedPref("lock.last_auth_ms", 0L)
 }
 
 private class BooleanSharedPref(val key: String, val defValue: Boolean = false): ReadWriteProperty<SharedPrefs, Boolean> {
@@ -46,4 +48,11 @@ private class IntSharedPref(val key: String, val defValue: Int = 0): ReadWritePr
         thisRef.sharedPrefs.getInt(key, defValue)
     override fun setValue(thisRef: SharedPrefs, property: KProperty<*>, value: Int) =
         thisRef.sharedPrefs.edit(true) { putInt(key, value) }
+}
+
+private class LongSharedPref(val key: String, val defValue: Long = 0L): ReadWriteProperty<SharedPrefs, Long> {
+    override fun getValue(thisRef: SharedPrefs, property: KProperty<*>): Long =
+        thisRef.sharedPrefs.getLong(key, defValue)
+    override fun setValue(thisRef: SharedPrefs, property: KProperty<*>, value: Long) =
+        thisRef.sharedPrefs.edit(true) { putLong(key, value) }
 }

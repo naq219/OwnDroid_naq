@@ -3,13 +3,14 @@ package com.bintianqi.owndroid.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,22 +28,22 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.bintianqi.owndroid.R
-import com.bintianqi.owndroid.Privilege
-import com.bintianqi.owndroid.SP
-import com.bintianqi.owndroid.showOperationResultToast
-import com.bintianqi.owndroid.dpm.PackageNameTextField
-import com.bintianqi.owndroid.dpm.isValidPackageName
-import kotlinx.serialization.Serializable
-import kotlin.random.Random
 
-@Serializable
-object RandomPasswordScreen
-
-private const val TOTAL_ATTEMPTS = 2
+private const val TOTAL_ATTEMPTS_DIALOG = 30
 
 @Composable
-fun RandomPasswordScreen(onSucceed: () -> Unit) {
+fun RandomPasswordDialog(onSucceed: () -> Unit, onDismiss: () -> Unit) {
+    Dialog(onDismiss) {
+        Card(Modifier.padding(16.dp)) {
+            RandomPasswordDialogBody(onSucceed)
+        }
+    }
+}
+
+@Composable
+private fun RandomPasswordDialogBody(onSucceed: () -> Unit) {
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     var randomString by remember { mutableStateOf("") }
@@ -50,15 +51,12 @@ fun RandomPasswordScreen(onSucceed: () -> Unit) {
     var isError by remember { mutableStateOf(false) }
     var successfulAttempts by remember { mutableIntStateOf(0) }
     var attemptsMessage by remember { mutableStateOf("") }
-    var packageName by remember { mutableStateOf("") }
 
     fun generateNewChallenge() {
         randomString = generateRandomString(10)
         input = ""
         isError = false
-        if (successfulAttempts < TOTAL_ATTEMPTS) {
-            attemptsMessage = context.getString(R.string.random_password_attempts_remaining, TOTAL_ATTEMPTS - successfulAttempts)
-        }
+        attemptsMessage = context.getString(R.string.random_password_attempts_remaining, TOTAL_ATTEMPTS_DIALOG - successfulAttempts)
     }
 
     DisposableEffect(Unit) {
@@ -69,10 +67,8 @@ fun RandomPasswordScreen(onSucceed: () -> Unit) {
     fun checkPassword() {
         if (input == randomString) {
             successfulAttempts++
-            if (successfulAttempts >= TOTAL_ATTEMPTS) {
+            if (successfulAttempts >= TOTAL_ATTEMPTS_DIALOG) {
                 focusManager.clearFocus()
-                // Mark last successful authentication time
-                SP.lastAuthTime = System.currentTimeMillis()
                 onSucceed()
             } else {
                 generateNewChallenge()
@@ -85,30 +81,28 @@ fun RandomPasswordScreen(onSucceed: () -> Unit) {
 
     Column(
         modifier = Modifier
-            .fillMaxSize()
+            .fillMaxWidth()
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         Text(
             text = context.getString(R.string.random_password_title),
-            fontSize = 20.sp,
-            modifier = Modifier.padding(bottom = 24.dp)
+            fontSize = 18.sp,
+            modifier = Modifier.padding(bottom = 12.dp)
         )
-
         Text(
             text = randomString,
-            fontSize = 24.sp,
-            modifier = Modifier.padding(bottom = 24.dp)
+            fontSize = 22.sp,
+            modifier = Modifier.padding(bottom = 16.dp)
         )
-
         OutlinedTextField(
             value = input,
             onValueChange = {
                 input = it
                 isError = false
-                 if (attemptsMessage == context.getString(R.string.random_password_incorrect_try_again)) {
-                    attemptsMessage = context.getString(R.string.random_password_attempts_remaining, TOTAL_ATTEMPTS - successfulAttempts)
+                if (attemptsMessage == context.getString(R.string.random_password_incorrect_try_again)) {
+                    attemptsMessage = context.getString(R.string.random_password_attempts_remaining, TOTAL_ATTEMPTS_DIALOG - successfulAttempts)
                 }
             },
             label = { Text(context.getString(R.string.random_password_input_label)) },
@@ -120,15 +114,12 @@ fun RandomPasswordScreen(onSucceed: () -> Unit) {
             ),
             keyboardActions = KeyboardActions(onDone = { checkPassword() })
         )
-
         Spacer(modifier = Modifier.height(8.dp))
-
         Text(
             text = attemptsMessage,
-            modifier = Modifier.padding(bottom = 16.dp),
+            modifier = Modifier.padding(bottom = 12.dp),
             fontSize = 14.sp
         )
-
         Button(
             onClick = { checkPassword() },
             modifier = Modifier.fillMaxWidth(),
@@ -136,44 +127,36 @@ fun RandomPasswordScreen(onSucceed: () -> Unit) {
         ) {
             Text(context.getString(R.string.random_password_verify_button))
         }
-
-        // Extra controls on login: input package name and block app (Suspend + Hide)
-        Spacer(modifier = Modifier.height(24.dp))
-        PackageNameTextField(
-            value = packageName,
-            modifier = Modifier.padding(bottom = 8.dp),
-            onValueChange = { packageName = it }
-        )
-        Button(
-            onClick = {
-                // Perform Suspend and Hide on the specified package
-                val suspendOk = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
-                    Privilege.DPM.setPackagesSuspended(Privilege.DAR, arrayOf(packageName), true).isEmpty()
-                } else {
-                    true
-                }
-                val hideOk = Privilege.DPM.setApplicationHidden(Privilege.DAR, packageName, true)
-                val ok = suspendOk && hideOk
-                context.showOperationResultToast(ok)
-                if (ok) {
-                    packageName = ""
-                    focusManager.clearFocus()
-                }
-            },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = packageName.isValidPackageName
-        ) {
-            Text("Block app")
-        }
     }
+}
+
+@Composable
+fun RandomChallengeIconButton(onAuthenticatedClick: () -> Unit, content: @Composable () -> Unit) {
+    var show by remember { mutableStateOf(false) }
+    IconButton({ show = true }) {
+        content()
+    }
+    if (show) {
+        RandomPasswordDialog(onSucceed = { show = false; onAuthenticatedClick() }, onDismiss = { show = false })
+    }
+}
+
+@Composable
+fun rememberRandomChallengeLauncher(): ((action: () -> Unit) -> Unit) {
+    var show by remember { mutableStateOf(false) }
+    var pending by remember { mutableStateOf<(() -> Unit)?>(null) }
+    if (show) {
+        RandomPasswordDialog(
+            onSucceed = { val p = pending; show = false; pending = null; p?.invoke() },
+            onDismiss = { show = false; pending = null }
+        )
+    }
+    return { action -> pending = action; show = true }
 }
 
 private fun generateRandomString(length: Int): String {
     val allowedChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-    val random = Random
     return buildString {
-        for (i in 1..length) {
-            append(allowedChars[random.nextInt(allowedChars.length)])
-        }
+        repeat(length) { append(allowedChars.random()) }
     }
 }
