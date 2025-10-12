@@ -281,7 +281,7 @@ class MainActivity : FragmentActivity() {
            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                val pkg = "dnsfilter.android"
 
-               dpm.setUninstallBlocked(adminComponent, packageName, true)
+             //  dpm.setUninstallBlocked(adminComponent, packageName, true)
 
 //               dpm.setUninstallBlocked(adminComponent, pkg, true)
 //
@@ -344,7 +344,7 @@ fun Home(vm: MyViewModel, onLock: () -> Unit) {
     fun navigate(destination: Any) { navController.navigate(destination) }
     LaunchedEffect(Unit) {
         // 1) Require login on app open if last auth older than 1 hour
-        val needsLogin = System.currentTimeMillis() - SP.lastAuthTime >= 60 * 60 * 1000
+        val needsLogin = System.currentTimeMillis() - SP.lastAuthTime >= 10 * 60 * 1000
         if (needsLogin) {
             navController.navigate(Login) {
                 popUpTo<Home> { inclusive = true }
@@ -528,7 +528,7 @@ fun Home(vm: MyViewModel, onLock: () -> Unit) {
     }
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            val needsLogin = System.currentTimeMillis() - SP.lastAuthTime >= 60 * 60 * 1000
+            val needsLogin = System.currentTimeMillis() - SP.lastAuthTime >= 10 * 60 * 1000
             if (
                 (event == Lifecycle.Event.ON_CREATE && needsLogin && !SP.lockPasswordHash.isNullOrEmpty()) ||
                 (event == Lifecycle.Event.ON_RESUME && SP.lockWhenLeaving)
