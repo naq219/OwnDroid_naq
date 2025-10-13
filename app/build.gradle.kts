@@ -46,6 +46,29 @@ android {
             signingConfig = signingConfigs.getByName("defaultSignature")
         }
     }
+
+    // Đặt tên file APK tự động với số thứ tự tăng dần
+    applicationVariants.all {
+        outputs.all {
+            val output = this as com.android.build.gradle.internal.api.BaseVariantOutputImpl
+            val buildTypeSuffix = if (buildType.name == "release") "r" else "d"
+            val packageName = applicationId.substringAfterLast(".")
+
+            // Lấy số thứ tự từ file counter (đặt ở thư mục gốc project)
+            val counterFile = rootProject.file("apk-counter.txt")
+            var counter = 1
+            if (counterFile.exists()) {
+                counter = counterFile.readText().toIntOrNull() ?: 1
+            }
+
+            // Tạo tên file
+            output.outputFileName = "${versionCode}${buildTypeSuffix}-${packageName}-i${counter}.apk"
+
+            // Tăng counter và lưu lại
+            counterFile.writeText((counter + 1).toString())
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21

@@ -31,10 +31,12 @@ import com.bintianqi.owndroid.R
 import com.bintianqi.owndroid.Privilege
 import com.bintianqi.owndroid.SP
 import com.bintianqi.owndroid.showOperationResultToast
+import com.bintianqi.owndroid.popToast
 import com.bintianqi.owndroid.dpm.PackageNameTextField
 import com.bintianqi.owndroid.dpm.isValidPackageName
 import kotlinx.serialization.Serializable
 import kotlin.random.Random
+import android.content.pm.PackageManager.NameNotFoundException
 
 @Serializable
 object RandomPasswordScreen
@@ -164,6 +166,38 @@ fun RandomPasswordScreen(onSucceed: () -> Unit) {
             enabled = packageName.isValidPackageName
         ) {
             Text("Block app")
+        }
+        
+        // Add Set VPN button
+        Spacer(modifier = Modifier.height(8.dp))
+        Button(
+            onClick = {
+                try {
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                        // Set the package as always-on VPN
+                        val lockdownEnabled = false // Default to no lockdown
+                        Privilege.DPM.setAlwaysOnVpnPackage(Privilege.DAR, "naq.dns", lockdownEnabled)
+                        context.showOperationResultToast(true)
+                        packageName = ""
+                        focusManager.clearFocus()
+                    } else {
+                        context.popToast(R.string.unsupported)
+                    }
+                } catch(e: UnsupportedOperationException) {
+                    e.printStackTrace()
+                    context.popToast(R.string.unsupported)
+                } catch(e: NameNotFoundException) {
+                    e.printStackTrace()
+                    context.popToast(R.string.not_installed)
+                } catch(e: Exception) {
+                    e.printStackTrace()
+                    context.popToast("Error: ${e.message}")
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = packageName.isValidPackageName
+        ) {
+            Text("Set VPN")
         }
     }
 }

@@ -11,3 +11,5 @@ app/build
 app/release
 app/debug
 .androidide
+app/*.log
+*.log
