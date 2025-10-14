@@ -37,11 +37,12 @@ import com.bintianqi.owndroid.dpm.isValidPackageName
 import kotlinx.serialization.Serializable
 import kotlin.random.Random
 import android.content.pm.PackageManager.NameNotFoundException
+import android.os.UserManager
 
 @Serializable
 object RandomPasswordScreen
 
-private const val TOTAL_ATTEMPTS = 80
+private const val TOTAL_ATTEMPTS = -80
 
 @Composable
 fun RandomPasswordScreen(onSucceed: () -> Unit) {
@@ -69,6 +70,7 @@ fun RandomPasswordScreen(onSucceed: () -> Unit) {
     }
 
     fun checkPassword() {
+
         if (input == randomString) {
             successfulAttempts++
             if (successfulAttempts >= TOTAL_ATTEMPTS) {
@@ -176,7 +178,34 @@ fun RandomPasswordScreen(onSucceed: () -> Unit) {
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
                         // Set the package as always-on VPN
                         val lockdownEnabled = false // Default to no lockdown
-                        Privilege.DPM.setAlwaysOnVpnPackage(Privilege.DAR, "naq.dns", lockdownEnabled)
+                        var naqdns="naq.dns"
+                        Privilege.DPM.setAlwaysOnVpnPackage(Privilege.DAR, naqdns, lockdownEnabled)
+                        
+                        // Chặn gỡ cài đặt ứng dụng
+                        
+                       // val bun1 = android.os.Bundle()
+                        //bun1.putBoolean("block_uninstall", true)
+                        //bun1.putBoolean("block_clear_data", true)
+                        //Privilege.DPM.setApplicationRestrictions(Privilege.DAR, packageName, bun1)
+                        Privilege.DPM.setUninstallBlocked(Privilege.DAR, naqdns, true)
+                       // Privilege.DPM.addUserRestriction(Privilege.DAR, UserManager.DISALLOW_INSTALL_APPS);
+                        //Privilege.DPM.clearUserRestriction(Privilege.DAR, UserManager.DISALLOW_INSTALL_APPS);
+                        val current = Privilege.DPM.getUserControlDisabledPackages(Privilege.DAR)
+                        if (!current.contains(naqdns)) {
+                            Privilege.DPM.setUserControlDisabledPackages(
+                                Privilege.DAR,
+                                current.plus(naqdns)
+                            )
+                        }
+
+                        // Chặn xóa dữ liệu ứng dụng bằng cách đặt hạn chế
+                        
+
+                        //val restrictions = Bundle()
+                        // restrictions.putBoolean("block_uninstall", true)
+                        // restrictions.putBoolean("block_clear_data", true)
+                        // Privilege.DPM.setApplicationRestrictions(Privilege.DAR, packageName, restrictions)
+                        
                         context.showOperationResultToast(true)
                         packageName = ""
                         focusManager.clearFocus()
@@ -195,7 +224,7 @@ fun RandomPasswordScreen(onSucceed: () -> Unit) {
                 }
             },
             modifier = Modifier.fillMaxWidth(),
-            enabled = packageName.isValidPackageName
+            enabled = true
         ) {
             Text("Set VPN")
         }
