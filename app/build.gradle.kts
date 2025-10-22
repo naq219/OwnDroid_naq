@@ -7,6 +7,7 @@ plugins {
     alias(libs.plugins.serialization)
 }
 
+
 android {
     signingConfigs {
         create("defaultSignature") {
@@ -26,7 +27,7 @@ android {
         applicationId = "com.bintianqi.owndroid"
         minSdk = 22
         targetSdk = 36
-        versionCode = 41
+        versionCode = 42
         versionName = "7.1.2"
         multiDexEnabled = false
     }
@@ -130,4 +131,7 @@ dependencies {
     implementation(libs.libsu)
     implementation(libs.serialization)
     implementation(kotlin("reflect"))
+
+
 }
+

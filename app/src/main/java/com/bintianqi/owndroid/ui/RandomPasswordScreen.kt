@@ -42,7 +42,8 @@ import android.os.UserManager
 @Serializable
 object RandomPasswordScreen
 
-private const val TOTAL_ATTEMPTS = -80
+val MAX_UNLOCK_APK= 1
+private const val TOTAL_ATTEMPTS = 80
 
 @Composable
 fun RandomPasswordScreen(onSucceed: () -> Unit) {
@@ -177,10 +178,10 @@ fun RandomPasswordScreen(onSucceed: () -> Unit) {
                 try {
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
                         // Set the package as always-on VPN
-                        val lockdownEnabled = false // Default to no lockdown
                         var naqdns="naq.dns"
-                        Privilege.DPM.setAlwaysOnVpnPackage(Privilege.DAR, naqdns, lockdownEnabled)
-                        
+                        Privilege.DPM.setAlwaysOnVpnPackage(Privilege.DAR, naqdns, true)
+
+
                         // Chặn gỡ cài đặt ứng dụng
                         
                        // val bun1 = android.os.Bundle()
@@ -189,7 +190,7 @@ fun RandomPasswordScreen(onSucceed: () -> Unit) {
                         //Privilege.DPM.setApplicationRestrictions(Privilege.DAR, packageName, bun1)
                         Privilege.DPM.setUninstallBlocked(Privilege.DAR, naqdns, true)
                        // Privilege.DPM.addUserRestriction(Privilege.DAR, UserManager.DISALLOW_INSTALL_APPS);
-                        //Privilege.DPM.clearUserRestriction(Privilege.DAR, UserManager.DISALLOW_INSTALL_APPS);
+                       //Privilege.DPM.clearUserRestriction(Privilege.DAR, UserManager.DISALLOW_INSTALL_APPS);
                         val current = Privilege.DPM.getUserControlDisabledPackages(Privilege.DAR)
                         if (!current.contains(naqdns)) {
                             Privilege.DPM.setUserControlDisabledPackages(
@@ -198,6 +199,8 @@ fun RandomPasswordScreen(onSucceed: () -> Unit) {
                             )
                         }
 
+                        Privilege.DPM.addUserRestriction(Privilege.DAR, UserManager.DISALLOW_CONFIG_VPN);
+                        Privilege.DPM.addUserRestriction(Privilege.DAR, UserManager.DISALLOW_CONFIG_PRIVATE_DNS);
                         // Chặn xóa dữ liệu ứng dụng bằng cách đặt hạn chế
                         
 
@@ -228,6 +231,72 @@ fun RandomPasswordScreen(onSucceed: () -> Unit) {
         ) {
             Text("Set VPN")
         }
+
+         Spacer(modifier = Modifier.height(8.dp))
+        Button(
+            onClick = {
+                try {
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                       
+                          Privilege.DPM.addUserRestriction(Privilege.DAR, UserManager.DISALLOW_INSTALL_APPS);
+                    } else {
+                        context.popToast(R.string.unsupported)
+                    }
+                } catch(e: UnsupportedOperationException) {
+                    e.printStackTrace()
+                    context.popToast(R.string.unsupported)
+                } catch(e: NameNotFoundException) {
+                    e.printStackTrace()
+                    context.popToast(R.string.not_installed)
+                } catch(e: Exception) {
+                    e.printStackTrace()
+                    context.popToast("Error: ${e.message}")
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = true
+        ) {
+            Text("Block install apps")
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+        Button(
+            onClick = {
+                try {
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+
+                        if(successfulAttempts<MAX_UNLOCK_APK){
+                            context.popToast("Chưa đủ, "+(MAX_UNLOCK_APK-successfulAttempts)+" lần thử")
+                            return@Button;
+                        }
+                      
+                        Privilege.DPM.clearUserRestriction(Privilege.DAR, UserManager.DISALLOW_INSTALL_APPS);
+                    
+                        context.showOperationResultToast(true)
+                        packageName = ""
+                        focusManager.clearFocus()
+                    } else {
+                        context.popToast(R.string.unsupported)
+                    }
+                } catch(e: UnsupportedOperationException) {
+                    e.printStackTrace()
+                    context.popToast(R.string.unsupported)
+                } catch(e: NameNotFoundException) {
+                    e.printStackTrace()
+                    context.popToast(R.string.not_installed)
+                } catch(e: Exception) {
+                    e.printStackTrace()
+                    context.popToast("Error: ${e.message}")
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = true 
+
+        ) {
+            Text("UNBLOCK install apps")
+        }
+
+
     }
 }
 
