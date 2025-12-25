@@ -65,7 +65,7 @@ object RandomPasswordScreen
 
 val MAX_UNLOCK_APK= 1
 private const val TOTAL_ATTEMPTS = 50
-private const val TOTAL_ATTEMPTS_TEMP = 3
+private const val TOTAL_ATTEMPTS_TEMP = 5
 
 @Composable
 fun RandomPasswordScreen(onSucceed: () -> Unit) {
@@ -384,12 +384,15 @@ private fun TempUnlockStatusCard(
     onActivateUnlock: () -> Unit
 ) {
     val canUnlock = successfulAttempts >= TOTAL_ATTEMPTS_TEMP
+    val isNightMode = TempUnlockManager.isNightMode()
+    val nightModeMinutesRemaining = TempUnlockManager.getMinutesUntilNightModeEnds()
     
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = when {
+                isNightMode && !isTempUnlockActive -> Color(0xFF1A237E).copy(alpha = 0.15f) // Dark blue tint for night
                 isTempUnlockActive -> Color(0xFF1B5E20).copy(alpha = 0.15f) // Green tint
                 canUnlock -> Color(0xFFE65100).copy(alpha = 0.15f) // Orange tint
                 else -> MaterialTheme.colorScheme.surfaceVariant
@@ -403,7 +406,7 @@ private fun TempUnlockStatusCard(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             when {
-                // UNLOCKED STATE - Show countdown
+                // UNLOCKED STATE - Show countdown (even during night mode, if already unlocked)
                 isTempUnlockActive -> {
                     val minutes = (remainingTimeMillis / 1000 / 60).toInt()
                     val seconds = ((remainingTimeMillis / 1000) % 60).toInt()
@@ -453,6 +456,50 @@ private fun TempUnlockStatusCard(
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
+                    )
+                }
+                
+                // NIGHT MODE - Block unlock
+                isNightMode -> {
+                    val hours = nightModeMinutesRemaining / 60
+                    val mins = nightModeMinutesRemaining % 60
+                    
+                    Text(
+                        text = "🌙",
+                        fontSize = 32.sp,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    
+                    Text(
+                        text = "CHẾ ĐỘ ĐÊM",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF3F51B5)
+                    )
+                    
+                    Spacer(modifier = Modifier.height(4.dp))
+                    
+                    Text(
+                        text = "22:00 - 07:00",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    Text(
+                        text = "Còn ${hours}h ${mins}m",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF3F51B5)
+                    )
+                    
+                    Spacer(modifier = Modifier.height(4.dp))
+                    
+                    Text(
+                        text = "Không thể mở khóa tạm thời",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 
@@ -540,3 +587,4 @@ private fun TempUnlockStatusCard(
         }
     }
 }
+
