@@ -143,6 +143,8 @@ fun RandomPasswordScreen(onSucceed: () -> Unit) {
                 TempUnlockManager.activateTempUnlock(context)
                 isTempUnlockActive = true
                 remainingTimeMillis = TempUnlockManager.getRemainingTimeMillis()
+                // Reset attempts so user must re-enter passwords for next unlock
+                successfulAttempts = 0
                 context.popToast("Đã mở khóa tạm thời 10 phút!")
             }
         )
@@ -206,16 +208,14 @@ fun RandomPasswordScreen(onSucceed: () -> Unit) {
         )
         Button(
             onClick = {
-                // Perform Suspend and Hide on the specified package
+                // Perform Suspend only (don't hide)
                 val suspendOk = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
                     Privilege.DPM.setPackagesSuspended(Privilege.DAR, arrayOf(packageName), true).isEmpty()
                 } else {
-                    true
+                    false
                 }
-                val hideOk = Privilege.DPM.setApplicationHidden(Privilege.DAR, packageName, true)
-                val ok = suspendOk && hideOk
-                context.showOperationResultToast(ok)
-                if (ok) {
+                context.showOperationResultToast(suspendOk)
+                if (suspendOk) {
                     packageName = ""
                     focusManager.clearFocus()
                 }

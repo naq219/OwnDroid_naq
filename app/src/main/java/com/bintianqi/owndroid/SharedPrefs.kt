@@ -30,6 +30,9 @@ class SharedPrefs(context: Context) {
     // Temporary unlock state
     var tempUnlockEndTime by LongSharedPref("temp_unlock.end_time", 0L)
     var isTempUnlockActive by BooleanSharedPref("temp_unlock.active", false)
+    // JSON list of blocked apps to restore after temp unlock expires
+    // Format: ["pkg1:suspended:hidden", "pkg2:suspended:hidden", ...]
+    var blockedAppsJson by StringSharedPref("temp_unlock.blocked_apps")
 }
 
 private class BooleanSharedPref(val key: String, val defValue: Boolean = false): ReadWriteProperty<SharedPrefs, Boolean> {
