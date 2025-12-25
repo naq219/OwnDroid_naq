@@ -130,6 +130,7 @@ dependencies {
     implementation(libs.hiddenApiBypass)
     implementation(libs.libsu)
     implementation(libs.serialization)
+    implementation(libs.workmanager)
     implementation(kotlin("reflect"))
 
 

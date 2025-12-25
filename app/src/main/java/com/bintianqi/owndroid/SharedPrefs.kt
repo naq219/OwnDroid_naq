@@ -27,6 +27,9 @@ class SharedPrefs(context: Context) {
     var dhizukuServer by BooleanSharedPref("dhizuku_server")
     // Timestamp (ms) of last successful login/authentication
     var lastAuthTime by LongSharedPref("lock.last_auth_ms", 0L)
+    // Temporary unlock state
+    var tempUnlockEndTime by LongSharedPref("temp_unlock.end_time", 0L)
+    var isTempUnlockActive by BooleanSharedPref("temp_unlock.active", false)
 }
 
 private class BooleanSharedPref(val key: String, val defValue: Boolean = false): ReadWriteProperty<SharedPrefs, Boolean> {
