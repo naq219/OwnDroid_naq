@@ -1,5 +1,7 @@
 package com.bintianqi.owndroid.ui
 
+import android.content.pm.PackageManager.NameNotFoundException
+import android.os.UserManager
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -27,23 +29,22 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.bintianqi.owndroid.R
 import com.bintianqi.owndroid.Privilege
+import com.bintianqi.owndroid.R
 import com.bintianqi.owndroid.SP
-import com.bintianqi.owndroid.showOperationResultToast
-import com.bintianqi.owndroid.popToast
 import com.bintianqi.owndroid.dpm.PackageNameTextField
 import com.bintianqi.owndroid.dpm.isValidPackageName
+import com.bintianqi.owndroid.popToast
+import com.bintianqi.owndroid.showOperationResultToast
 import kotlinx.serialization.Serializable
 import kotlin.random.Random
-import android.content.pm.PackageManager.NameNotFoundException
-import android.os.UserManager
+
 
 @Serializable
 object RandomPasswordScreen
 
 val MAX_UNLOCK_APK= 1
-private const val TOTAL_ATTEMPTS = 80
+private const val TOTAL_ATTEMPTS = -20
 
 @Composable
 fun RandomPasswordScreen(onSucceed: () -> Unit) {
@@ -179,7 +180,15 @@ fun RandomPasswordScreen(onSucceed: () -> Unit) {
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
                         // Set the package as always-on VPN
                         var naqdns="naq.dns"
-                        Privilege.DPM.setAlwaysOnVpnPackage(Privilege.DAR, naqdns, true)
+                        val allowlist: MutableSet<String?> = HashSet<String?>()
+                        allowlist.add("com.facebook.adsmanager")
+                        allowlist.add("com.facebook.orca")
+
+                        allowlist.add("com.facebook.pages.app")
+//                        allowlist.add("com.facebook.orca")
+//                        allowlist.add("com.facebook.orca")
+
+                        Privilege.DPM.setAlwaysOnVpnPackage(Privilege.DAR, naqdns, false,allowlist)
 
 
                         // Chặn gỡ cài đặt ứng dụng
