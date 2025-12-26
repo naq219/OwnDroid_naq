@@ -21,12 +21,12 @@ import java.util.concurrent.TimeUnit
 object TempUnlockManager {
     
     private const val TAG = "TempUnlockManager"
-    private const val TEMP_UNLOCK_DURATION_MINUTES = 1L // TEST: 1 minute
+    private val TEMP_UNLOCK_DURATION_MINUTES = AppConfig.TEMP_UNLOCK_DURATION_MINUTES
     private const val WORK_NAME = "temp_unlock_relock"
     
-    // Night mode hours (22:00 - 07:00)
-    private const val NIGHT_START_HOUR = 22
-    private const val NIGHT_END_HOUR = 7
+    // Night mode hours from config
+    private val NIGHT_START_HOUR = AppConfig.NIGHT_MODE_START_HOUR
+    private val NIGHT_END_HOUR = AppConfig.NIGHT_MODE_END_HOUR
     
     private val json = Json { ignoreUnknownKeys = true }
     
@@ -294,7 +294,7 @@ object TempUnlockManager {
                 lockAllSoftlockApps()
                 Log.d(TAG, "Step 1: DONE")
                 
-                val naqdns = "naq.dns"
+                val vpnPackage = AppConfig.VPN_PACKAGE
                 
                 // 2. Re-add install apps restriction
                 Log.d(TAG, "Step 2: Adding DISALLOW_INSTALL_APPS restriction...")
@@ -302,12 +302,9 @@ object TempUnlockManager {
                 Log.d(TAG, "Step 2: DONE")
                 
                 // 3. Re-set always-on VPN
-                Log.d(TAG, "Step 3: Setting VPN to $naqdns...")
-                val allowlist: MutableSet<String?> = HashSet()
-                allowlist.add("com.facebook.adsmanager")
-                allowlist.add("com.facebook.orca")
-                allowlist.add("com.facebook.pages.app")
-                Privilege.DPM.setAlwaysOnVpnPackage(Privilege.DAR, naqdns, false, allowlist)
+                Log.d(TAG, "Step 3: Setting VPN to $vpnPackage...")
+                val allowlist: MutableSet<String?> = HashSet(AppConfig.VPN_ALLOWLIST)
+                Privilege.DPM.setAlwaysOnVpnPackage(Privilege.DAR, vpnPackage, false, allowlist)
                 Log.d(TAG, "Step 3: VPN SET DONE")
                 
                 // 4. Re-add VPN config restriction
@@ -321,15 +318,15 @@ object TempUnlockManager {
                 Log.d(TAG, "Step 5: DONE")
                 
                 // 6. Block uninstall for VPN app
-                Log.d(TAG, "Step 6: Block uninstall for $naqdns...")
-                Privilege.DPM.setUninstallBlocked(Privilege.DAR, naqdns, true)
+                Log.d(TAG, "Step 6: Block uninstall for $vpnPackage...")
+                Privilege.DPM.setUninstallBlocked(Privilege.DAR, vpnPackage, true)
                 Log.d(TAG, "Step 6: DONE")
                 
                 // 7. Disable user control for VPN app
                 Log.d(TAG, "Step 7: Disable user control...")
                 val current = Privilege.DPM.getUserControlDisabledPackages(Privilege.DAR)
-                if (!current.contains(naqdns)) {
-                    Privilege.DPM.setUserControlDisabledPackages(Privilege.DAR, current.plus(naqdns))
+                if (!current.contains(vpnPackage)) {
+                    Privilege.DPM.setUserControlDisabledPackages(Privilege.DAR, current.plus(vpnPackage))
                 }
                 Log.d(TAG, "Step 7: DONE")
             }

@@ -52,6 +52,7 @@ import com.bintianqi.owndroid.Privilege
 import com.bintianqi.owndroid.R
 import com.bintianqi.owndroid.SP
 import com.bintianqi.owndroid.TempUnlockManager
+import com.bintianqi.owndroid.AppConfig
 import com.bintianqi.owndroid.dpm.PackageNameTextField
 import com.bintianqi.owndroid.dpm.isValidPackageName
 import com.bintianqi.owndroid.popToast
@@ -65,8 +66,8 @@ import kotlin.random.Random
 object RandomPasswordScreen
 
 val MAX_UNLOCK_APK= 1
-private const val TOTAL_ATTEMPTS = 3
-private const val TOTAL_ATTEMPTS_TEMP = 1
+private val TOTAL_ATTEMPTS = AppConfig.ATTEMPTS_FOR_SETTINGS
+private val TOTAL_ATTEMPTS_TEMP = AppConfig.ATTEMPTS_FOR_TEMP_UNLOCK
 
 @Composable
 fun RandomPasswordScreen(onSucceed: () -> Unit) {
@@ -273,11 +274,9 @@ fun RandomPasswordScreen(onSucceed: () -> Unit) {
         }
         
         // ============= APP LIST MANAGEMENT SECTION =============
-        // Show when user has passed TOTAL_ATTEMPTS_TEMP (same as temp unlock requirement)
-        if (successfulAttempts >= TOTAL_ATTEMPTS_TEMP) {
-            Spacer(modifier = Modifier.height(24.dp))
-            AppListManagementSection()
-        }
+        // Always show, but actions only enabled after passing TOTAL_ATTEMPTS_TEMP
+        Spacer(modifier = Modifier.height(24.dp))
+        AppListManagementSection(actionsEnabled = successfulAttempts >= TOTAL_ATTEMPTS_TEMP)
         
         // Add Set VPN button
         Spacer(modifier = Modifier.height(8.dp))
@@ -286,32 +285,20 @@ fun RandomPasswordScreen(onSucceed: () -> Unit) {
                 try {
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
                         // Set the package as always-on VPN
-                        var naqdns="naq.dns"
-                        val allowlist: MutableSet<String?> = HashSet<String?>()
-                        allowlist.add("com.facebook.adsmanager")
-                        allowlist.add("com.facebook.orca")
+                        val vpnPackage = AppConfig.VPN_PACKAGE
+                        val allowlist: MutableSet<String?> = HashSet(AppConfig.VPN_ALLOWLIST)
 
-                        allowlist.add("com.facebook.pages.app")
-//                        allowlist.add("com.facebook.orca")
-//                        allowlist.add("com.facebook.orca")
+                        Privilege.DPM.setAlwaysOnVpnPackage(Privilege.DAR, vpnPackage, false, allowlist)
 
-                        Privilege.DPM.setAlwaysOnVpnPackage(Privilege.DAR, naqdns, false,allowlist)
-
-
-                        // Chặn gỡ cài đặt ứng dụng
+                        // Block uninstall for VPN app
+                        Privilege.DPM.setUninstallBlocked(Privilege.DAR, vpnPackage, true)
                         
-                       // val bun1 = android.os.Bundle()
-                        //bun1.putBoolean("block_uninstall", true)
-                        //bun1.putBoolean("block_clear_data", true)
-                        //Privilege.DPM.setApplicationRestrictions(Privilege.DAR, packageName, bun1)
-                        Privilege.DPM.setUninstallBlocked(Privilege.DAR, naqdns, true)
-                       // Privilege.DPM.addUserRestriction(Privilege.DAR, UserManager.DISALLOW_INSTALL_APPS);
-                       //Privilege.DPM.clearUserRestriction(Privilege.DAR, UserManager.DISALLOW_INSTALL_APPS);
+                        // Disable user control
                         val current = Privilege.DPM.getUserControlDisabledPackages(Privilege.DAR)
-                        if (!current.contains(naqdns)) {
+                        if (!current.contains(vpnPackage)) {
                             Privilege.DPM.setUserControlDisabledPackages(
                                 Privilege.DAR,
-                                current.plus(naqdns)
+                                current.plus(vpnPackage)
                             )
                         }
 
@@ -436,7 +423,7 @@ private fun TempUnlockStatusCard(
     remainingTimeMillis: Long,
     onActivateUnlock: () -> Unit
 ) {
-    val canUnlock = true // TEST: Always show unlock button
+    val canUnlock = successfulAttempts >= TOTAL_ATTEMPTS_TEMP
     val isNightMode = TempUnlockManager.isNightMode()
     val nightModeMinutesRemaining = TempUnlockManager.getMinutesUntilNightModeEnds()
     
@@ -592,7 +579,7 @@ private fun TempUnlockStatusCard(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "TẠM MỞ KHÓA 1 PHÚT", // TEST
+                            text = "TẠM MỞ KHÓA ${AppConfig.TEMP_UNLOCK_DURATION_MINUTES} PHÚT",
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp
                         )
@@ -644,9 +631,10 @@ private fun TempUnlockStatusCard(
 /**
  * Section for managing Hardlock and Softlock app lists
  * Shows current blocked apps and allows multi-select to add new ones
+ * @param actionsEnabled If false, shows lists but disables action buttons
  */
 @Composable
-private fun AppListManagementSection() {
+private fun AppListManagementSection(actionsEnabled: Boolean = true) {
     val context = LocalContext.current
     var softlockApps by remember { mutableStateOf(TempUnlockManager.getSoftlockApps()) }
     var hardlockApps by remember { mutableStateOf(TempUnlockManager.getHardlockApps()) }
@@ -676,6 +664,16 @@ private fun AppListManagementSection() {
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(bottom = 12.dp)
             )
+            
+            // Locked message when actions disabled
+            if (!actionsEnabled) {
+                Text(
+                    text = "🔒 Nhập mật khẩu để thao tác",
+                    fontSize = 12.sp,
+                    color = Color.Gray,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+            }
             
             // ========== ADD MULTIPLE APPS BUTTON ==========
             Button(
@@ -724,7 +722,8 @@ private fun AppListManagementSection() {
                                     context.popToast("Đã gỡ: $pkg")
                                 },
                                 moveButtonText = "→🔒",
-                                moveButtonColor = Color(0xFFB71C1C)
+                                moveButtonColor = Color(0xFFB71C1C),
+                                enabled = actionsEnabled
                             )
                         }
                     }
@@ -765,7 +764,8 @@ private fun AppListManagementSection() {
                                     context.popToast("Đã gỡ: $pkg")
                                 },
                                 moveButtonText = "→🔓",
-                                moveButtonColor = Color(0xFF1976D2)
+                                moveButtonColor = Color(0xFF1976D2),
+                                enabled = actionsEnabled
                             )
                         }
                     }
@@ -816,7 +816,8 @@ private fun BlockedAppRow(
     onMoveClick: () -> Unit,
     onRemoveClick: () -> Unit,
     moveButtonText: String,
-    moveButtonColor: Color
+    moveButtonColor: Color,
+    enabled: Boolean = true
 ) {
     Row(
         modifier = Modifier
@@ -828,13 +829,17 @@ private fun BlockedAppRow(
         Text(
             text = packageName,
             fontSize = 11.sp,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
+            color = if (enabled) Color.Unspecified else Color.Gray
         )
         Row {
             Button(
                 onClick = onMoveClick,
                 modifier = Modifier.height(28.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = moveButtonColor)
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (enabled) moveButtonColor else Color.LightGray
+                ),
+                enabled = enabled
             ) {
                 Text(moveButtonText, fontSize = 10.sp)
             }
@@ -842,7 +847,10 @@ private fun BlockedAppRow(
             Button(
                 onClick = onRemoveClick,
                 modifier = Modifier.height(28.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color.Gray)
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (enabled) Color.Gray else Color.LightGray
+                ),
+                enabled = enabled
             ) {
                 Text("✕", fontSize = 10.sp)
             }
