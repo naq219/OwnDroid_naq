@@ -33,6 +33,14 @@ class SharedPrefs(context: Context) {
     // JSON list of blocked apps to restore after temp unlock expires
     // Format: ["pkg1:suspended:hidden", "pkg2:suspended:hidden", ...]
     var blockedAppsJson by StringSharedPref("temp_unlock.blocked_apps")
+    
+    // Hardlock apps - permanently locked, NEVER unlocked during temp unlock
+    // JSON array of package names: ["com.app1", "com.app2", ...]
+    var hardlockApps by StringSharedPref("lock.hardlock_apps")
+    
+    // Softlock apps - locked but CAN be unlocked during temp unlock
+    // JSON array of package names: ["com.app1", "com.app2", ...]
+    var softlockApps by StringSharedPref("lock.softlock_apps")
 }
 
 private class BooleanSharedPref(val key: String, val defValue: Boolean = false): ReadWriteProperty<SharedPrefs, Boolean> {

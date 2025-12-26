@@ -1,0 +1,99 @@
+﻿Starting a Gradle Daemon, 1 busy and 1 stopped Daemons could not be reused, use --status for details
+Calculating task graph as configuration cache cannot be reused because file 'apk-counter.txt' has changed.
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:generateDebugResValues UP-TO-DATE
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:extractDebugSupportedLocales UP-TO-DATE
+> Task :app:generateDebugLocaleConfig UP-TO-DATE
+> Task :app:createDebugCompatibleScreenManifests
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:compileDebugAidl UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+> Task :app:mergeDebugResources UP-TO-DATE
+> Task :app:processDebugMainManifest FROM-CACHE
+> Task :app:processDebugManifest
+> Task :app:processDebugManifestForPackage FROM-CACHE
+> Task :app:processDebugResources
+
+> Task :app:compileDebugKotlin
+./gradlew : e: file
+:///D:/PROJECT/OwnD
+roid_naq/app/src/ma
+in/java/com/bintian
+qi/owndroid/RelockW
+orker.kt:25:23 
+Backing field of 
+'var SP: 
+SharedPrefs' is 
+not accessible at 
+this point.
+At line:1 char:1
++ ./gradlew 
+compileDebugKotlin 
+2>&1 | Out-File 
+-FilePath 
+build_log.txt  ...
++ ~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
+    + CategoryInfo 
+             : No  
+  tSpecified: (e   
+ : file:///D:/P    
+... at this po    
+int.:String) [    
+], RemoteExcep    
+tion
+    + FullyQualifi 
+   edErrorId : Na  
+  tiveCommandErr   
+ or
+ 
+
+> Task :app:compileDebugKotlin FAILED
+
+FAILURE: Build 
+failed with an 
+exception.
+
+* What went wrong:
+Execution failed 
+for task ':app:comp
+ileDebugKotlin'.
+> A failure 
+occurred while 
+executing org.jetbr
+ains.kotlin.compile
+rRunner.GradleCompi
+lerRunnerWithWorker
+s$GradleKotlinCompi
+lerWorkAction
+   > Compilation 
+error. See log for 
+more details
+
+* Try:
+> Run with 
+--stacktrace 
+option to get the 
+stack trace.
+> Run with --info 
+or --debug option 
+to get more log 
+output.
+> Run with --scan 
+to generate a 
+Build Scan 
+(Powered by 
+Develocity).
+> Get more help at 
+https://help.gradle
+.org.
+
+BUILD FAILED in 29s
+17 actionable tasks: 4 executed, 2 from cache, 11 up-to-date
+Configuration cache entry stored.

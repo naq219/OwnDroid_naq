@@ -1,32 +1,22 @@
 package com.bintianqi.owndroid
 
 import android.content.Context
-import android.content.pm.ApplicationInfo
-import android.content.pm.PackageManager
 import android.os.Build
 import android.os.UserManager
 import android.util.Log
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkManager
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.util.concurrent.TimeUnit
 
 /**
- * Data class to store blocked app state
- */
-@Serializable
-data class BlockedAppState(
-    val packageName: String,
-    val isSuspended: Boolean,
-    val isHidden: Boolean
-)
-
-/**
- * Manager for temporary unlock feature.
- * When activated, saves blocked apps state, removes restrictions for 10 minutes, then auto-relocks.
+ * Manager for temporary unlock feature with Hardlock/Softlock support.
+ * 
+ * - Hardlock: Apps permanently locked, NEVER unlocked during temp unlock
+ * - Softlock: Apps that CAN be unlocked during temp unlock period
  */
 object TempUnlockManager {
     
@@ -39,6 +29,158 @@ object TempUnlockManager {
     private const val NIGHT_END_HOUR = 7
     
     private val json = Json { ignoreUnknownKeys = true }
+    
+    // ============= SOFTLOCK LIST MANAGEMENT =============
+    
+    /**
+     * Get list of softlock apps (can be unlocked during temp unlock)
+     */
+    fun getSoftlockApps(): List<String> {
+        val jsonStr = SP.softlockApps ?: return emptyList()
+        return try {
+            json.decodeFromString(jsonStr)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error parsing softlock apps", e)
+            emptyList()
+        }
+    }
+    
+    /**
+     * Add app to softlock list
+     */
+    fun addToSoftlock(packageName: String) {
+        val current = getSoftlockApps().toMutableList()
+        if (!current.contains(packageName)) {
+            current.add(packageName)
+            SP.softlockApps = json.encodeToString(current)
+            Log.d(TAG, "Added to softlock: $packageName")
+        }
+    }
+    
+    /**
+     * Remove app from softlock list
+     */
+    fun removeFromSoftlock(packageName: String) {
+        val current = getSoftlockApps().toMutableList()
+        if (current.remove(packageName)) {
+            SP.softlockApps = json.encodeToString(current)
+            Log.d(TAG, "Removed from softlock: $packageName")
+        }
+    }
+    
+    // ============= HARDLOCK LIST MANAGEMENT =============
+    
+    /**
+     * Get list of hardlock apps (permanently locked)
+     */
+    fun getHardlockApps(): List<String> {
+        val jsonStr = SP.hardlockApps ?: return emptyList()
+        return try {
+            json.decodeFromString(jsonStr)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error parsing hardlock apps", e)
+            emptyList()
+        }
+    }
+    
+    /**
+     * Add app to hardlock list
+     */
+    fun addToHardlock(packageName: String) {
+        val current = getHardlockApps().toMutableList()
+        if (!current.contains(packageName)) {
+            current.add(packageName)
+            SP.hardlockApps = json.encodeToString(current)
+            Log.d(TAG, "Added to hardlock: $packageName")
+        }
+        // Also remove from softlock if exists
+        removeFromSoftlock(packageName)
+    }
+    
+    /**
+     * Remove app from hardlock list
+     */
+    fun removeFromHardlock(packageName: String) {
+        val current = getHardlockApps().toMutableList()
+        if (current.remove(packageName)) {
+            SP.hardlockApps = json.encodeToString(current)
+            Log.d(TAG, "Removed from hardlock: $packageName")
+        }
+    }
+    
+    /**
+     * Move app from softlock to hardlock
+     */
+    fun moveToHardlock(packageName: String) {
+        removeFromSoftlock(packageName)
+        addToHardlock(packageName)
+    }
+    
+    /**
+     * Move app from hardlock to softlock
+     */
+    fun moveToSoftlock(packageName: String) {
+        removeFromHardlock(packageName)
+        addToSoftlock(packageName)
+    }
+    
+    // ============= LOCK/UNLOCK OPERATIONS =============
+    
+    /**
+     * Suspend a single app immediately
+     */
+    fun suspendApp(packageName: String): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
+        return try {
+            val result = Privilege.DPM.setPackagesSuspended(Privilege.DAR, arrayOf(packageName), true)
+            val success = result.isEmpty()
+            Log.d(TAG, "Suspend $packageName: ${if (success) "OK" else "FAILED"}")
+            success
+        } catch (e: Exception) {
+            Log.e(TAG, "Error suspending $packageName", e)
+            false
+        }
+    }
+    
+    /**
+     * Unsuspend a single app
+     */
+    fun unsuspendApp(packageName: String): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
+        return try {
+            val result = Privilege.DPM.setPackagesSuspended(Privilege.DAR, arrayOf(packageName), false)
+            val success = result.isEmpty()
+            Log.d(TAG, "Unsuspend $packageName: ${if (success) "OK" else "FAILED"}")
+            success
+        } catch (e: Exception) {
+            Log.e(TAG, "Error unsuspending $packageName", e)
+            false
+        }
+    }
+    
+    /**
+     * Lock all apps in softlock list (suspend them)
+     */
+    fun lockAllSoftlockApps() {
+        val apps = getSoftlockApps()
+        Log.d(TAG, "Locking ${apps.size} softlock apps")
+        for (pkg in apps) {
+            suspendApp(pkg)
+        }
+    }
+    
+    /**
+     * Unlock all apps in softlock list (unsuspend them)
+     */
+    fun unlockAllSoftlockApps() {
+        val apps = getSoftlockApps()
+        Log.d(TAG, "Unlocking ${apps.size} softlock apps")
+        for (pkg in apps) {
+            unsuspendApp(pkg)
+        }
+    }
+    
+    // ============= NIGHT MODE =============
     
     /**
      * Check if current time is in night mode (22:00 - 07:00)
@@ -69,64 +211,12 @@ object TempUnlockManager {
         return minutesRemaining
     }
     
-    /**
-     * Get list of currently blocked apps (suspended or hidden)
-     * Uses DPM APIs to properly detect suspended/hidden state
-     */
-    fun getBlockedApps(context: Context): List<BlockedAppState> {
-        val blockedApps = mutableListOf<BlockedAppState>()
-        
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return blockedApps
-        
-        try {
-            val pm = context.packageManager
-            // Get all installed packages including disabled/hidden ones
-            val installedPackages = pm.getInstalledPackages(
-                PackageManager.GET_META_DATA or PackageManager.MATCH_DISABLED_COMPONENTS or PackageManager.MATCH_UNINSTALLED_PACKAGES
-            )
-            
-            for (pkg in installedPackages) {
-                val packageName = pkg.packageName
-                try {
-                    // Use DPM to check hidden state
-                    val isHidden = try {
-                        Privilege.DPM.isApplicationHidden(Privilege.DAR, packageName)
-                    } catch (e: Exception) {
-                        false
-                    }
-                    
-                    // Check if suspended using ApplicationInfo flags
-                    val isSuspended = try {
-                        val appInfo = pm.getApplicationInfo(packageName, PackageManager.MATCH_UNINSTALLED_PACKAGES)
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                            (appInfo.flags and ApplicationInfo.FLAG_SUSPENDED) != 0
-                        } else {
-                            false
-                        }
-                    } catch (e: Exception) {
-                        false
-                    }
-                    
-                    if (isHidden || isSuspended) {
-                        blockedApps.add(BlockedAppState(packageName, isSuspended, isHidden))
-                        Log.d(TAG, "Found blocked app: $packageName (suspended=$isSuspended, hidden=$isHidden)")
-                    }
-                } catch (e: Exception) {
-                    // Ignore individual package errors
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error getting blocked apps", e)
-        }
-        
-        Log.d(TAG, "Total blocked apps found: ${blockedApps.size}")
-        return blockedApps
-    }
+    // ============= TEMP UNLOCK =============
     
     /**
      * Activate temporary unlock for 10 minutes.
-     * - Saves current blocked apps state
-     * - Unblocks all suspended/hidden apps
+     * - Unlocks all SOFTLOCK apps (unsuspend)
+     * - HARDLOCK apps remain locked
      * - Clears restrictions
      * - Schedules auto-relock via WorkManager
      */
@@ -134,42 +224,26 @@ object TempUnlockManager {
         var unlockedCount = 0
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                // 1. Save current blocked apps state
-                val blockedApps = getBlockedApps(context)
-                SP.blockedAppsJson = json.encodeToString(blockedApps)
-                Log.d(TAG, "Saved ${blockedApps.size} blocked apps: ${blockedApps.map { it.packageName }}")
+                // 1. Unlock all SOFTLOCK apps only
+                val softlockApps = getSoftlockApps()
+                Log.d(TAG, "Temp unlock: unlocking ${softlockApps.size} softlock apps")
                 
-                // 2. Unblock all apps - ALWAYS try both unsuspend AND unhide
-                for (app in blockedApps) {
-                    try {
-                        // Always try to unsuspend (regardless of isSuspended flag detection)
-                        val unsuspendResult = Privilege.DPM.setPackagesSuspended(Privilege.DAR, arrayOf(app.packageName), false)
-                        if (unsuspendResult.isEmpty()) {
-                            Log.d(TAG, "Unsuspended: ${app.packageName}")
-                        }
-                        
-                        // Always try to unhide (regardless of isHidden flag detection)
-                        val unhideResult = Privilege.DPM.setApplicationHidden(Privilege.DAR, app.packageName, false)
-                        if (unhideResult) {
-                            Log.d(TAG, "Unhidden: ${app.packageName}")
-                        }
-                        
+                for (pkg in softlockApps) {
+                    if (unsuspendApp(pkg)) {
                         unlockedCount++
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error unblocking ${app.packageName}", e)
                     }
                 }
                 
-                // 3. Clear install apps restriction
+                // 2. Clear install apps restriction
                 Privilege.DPM.clearUserRestriction(Privilege.DAR, UserManager.DISALLOW_INSTALL_APPS)
                 
-                // 4. Clear always-on VPN
+                // 3. Clear always-on VPN
                 Privilege.DPM.setAlwaysOnVpnPackage(Privilege.DAR, null, false)
                 
-                // 5. Clear VPN config restriction  
+                // 4. Clear VPN config restriction  
                 Privilege.DPM.clearUserRestriction(Privilege.DAR, UserManager.DISALLOW_CONFIG_VPN)
                 
-                // 6. Clear private DNS config restriction
+                // 5. Clear private DNS config restriction
                 Privilege.DPM.clearUserRestriction(Privilege.DAR, UserManager.DISALLOW_CONFIG_PRIVATE_DNS)
             }
             
@@ -189,38 +263,15 @@ object TempUnlockManager {
     }
     
     /**
-     * Deactivate temporary unlock - restore all previous blocked apps and restrictions.
+     * Deactivate temporary unlock - re-lock all SOFTLOCK apps and restore restrictions.
+     * HARDLOCK apps are not affected (they're always locked)
      */
     fun deactivateTempUnlock(context: Context) {
+        Log.d(TAG, "Deactivating temp unlock...")
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                // 1. Restore blocked apps from saved state
-                val blockedAppsJsonStr = SP.blockedAppsJson
-                if (!blockedAppsJsonStr.isNullOrEmpty()) {
-                    try {
-                        val blockedApps = json.decodeFromString<List<BlockedAppState>>(blockedAppsJsonStr)
-                        Log.d(TAG, "Restoring ${blockedApps.size} blocked apps")
-                        
-                        for (app in blockedApps) {
-                            try {
-                                // Re-suspend if it was suspended
-                                if (app.isSuspended) {
-                                    Privilege.DPM.setPackagesSuspended(Privilege.DAR, arrayOf(app.packageName), true)
-                                    Log.d(TAG, "Re-suspended: ${app.packageName}")
-                                }
-                                // Re-hide if it was hidden
-                                if (app.isHidden) {
-                                    Privilege.DPM.setApplicationHidden(Privilege.DAR, app.packageName, true)
-                                    Log.d(TAG, "Re-hidden: ${app.packageName}")
-                                }
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Error restoring block for ${app.packageName}", e)
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error parsing blocked apps JSON", e)
-                    }
-                }
+                // 1. Re-lock all SOFTLOCK apps
+                lockAllSoftlockApps()
                 
                 val naqdns = "naq.dns"
                 
@@ -253,24 +304,11 @@ object TempUnlockManager {
             // Clear unlock state
             SP.tempUnlockEndTime = 0L
             SP.isTempUnlockActive = false
-            SP.blockedAppsJson = null
             
             Log.d(TAG, "Temp unlock deactivated")
             
         } catch (e: Exception) {
             Log.e(TAG, "Error deactivating temp unlock", e)
-        }
-    }
-    
-    /**
-     * Get saved blocked apps list (for display in UI)
-     */
-    fun getSavedBlockedApps(): List<BlockedAppState> {
-        val jsonStr = SP.blockedAppsJson ?: return emptyList()
-        return try {
-            json.decodeFromString(jsonStr)
-        } catch (e: Exception) {
-            emptyList()
         }
     }
     
@@ -293,10 +331,13 @@ object TempUnlockManager {
     private fun scheduleRelockWorker(context: Context) {
         val relockRequest = OneTimeWorkRequestBuilder<RelockWorker>()
             .setInitialDelay(TEMP_UNLOCK_DURATION_MINUTES, TimeUnit.MINUTES)
+            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             .build()
         
         WorkManager.getInstance(context)
             .enqueueUniqueWork(WORK_NAME, ExistingWorkPolicy.REPLACE, relockRequest)
+        
+        Log.d(TAG, "Scheduled RelockWorker to run in $TEMP_UNLOCK_DURATION_MINUTES minutes")
     }
     
     /**
@@ -306,3 +347,4 @@ object TempUnlockManager {
         WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
     }
 }
+

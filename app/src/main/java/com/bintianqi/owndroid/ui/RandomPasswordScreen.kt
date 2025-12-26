@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -64,8 +65,8 @@ import kotlin.random.Random
 object RandomPasswordScreen
 
 val MAX_UNLOCK_APK= 1
-private const val TOTAL_ATTEMPTS = 50
-private const val TOTAL_ATTEMPTS_TEMP = 5
+private const val TOTAL_ATTEMPTS = 3
+private const val TOTAL_ATTEMPTS_TEMP = 1
 
 @Composable
 fun RandomPasswordScreen(onSucceed: () -> Unit) {
@@ -208,22 +209,65 @@ fun RandomPasswordScreen(onSucceed: () -> Unit) {
         )
         Button(
             onClick = {
-                // Perform Suspend only (don't hide)
-                val suspendOk = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
-                    Privilege.DPM.setPackagesSuspended(Privilege.DAR, arrayOf(packageName), true).isEmpty()
+                // Add to softlock list AND suspend immediately
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                    // 1. Add to softlock list
+                    TempUnlockManager.addToSoftlock(packageName)
+                    
+                    // 2. Suspend the app immediately
+                    val suspendOk = TempUnlockManager.suspendApp(packageName)
+                    
+                    context.showOperationResultToast(suspendOk)
+                    if (suspendOk) {
+                        context.popToast("Đã thêm vào Softlock: $packageName")
+                        packageName = ""
+                        focusManager.clearFocus()
+                    }
                 } else {
-                    false
-                }
-                context.showOperationResultToast(suspendOk)
-                if (suspendOk) {
-                    packageName = ""
-                    focusManager.clearFocus()
+                    context.popToast(R.string.unsupported)
                 }
             },
             modifier = Modifier.fillMaxWidth(),
             enabled = packageName.isValidPackageName
         ) {
-            Text("Block app")
+            Text("Block app (Softlock)")
+        }
+        
+        // Hardlock button - permanently lock app
+        Spacer(modifier = Modifier.height(8.dp))
+        Button(
+            onClick = {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                    // 1. Add to hardlock list
+                    TempUnlockManager.addToHardlock(packageName)
+                    
+                    // 2. Suspend the app immediately
+                    val suspendOk = TempUnlockManager.suspendApp(packageName)
+                    
+                    context.showOperationResultToast(suspendOk)
+                    if (suspendOk) {
+                        context.popToast("Đã thêm vào Hardlock (vĩnh viễn): $packageName")
+                        packageName = ""
+                        focusManager.clearFocus()
+                    }
+                } else {
+                    context.popToast(R.string.unsupported)
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFFB71C1C) // Dark red for hardlock
+            ),
+            enabled = packageName.isValidPackageName
+        ) {
+            Text("🔒 Hardlock (vĩnh viễn)")
+        }
+        
+        // ============= APP LIST MANAGEMENT SECTION =============
+        // Show when user has passed TOTAL_ATTEMPTS_TEMP (same as temp unlock requirement)
+        if (successfulAttempts >= TOTAL_ATTEMPTS_TEMP) {
+            Spacer(modifier = Modifier.height(24.dp))
+            AppListManagementSection()
         }
         
         // Add Set VPN button
@@ -582,6 +626,358 @@ private fun TempUnlockStatusCard(
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                     )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Section for managing Hardlock and Softlock app lists
+ * Shows current blocked apps and allows multi-select to add new ones
+ */
+@Composable
+private fun AppListManagementSection() {
+    val context = LocalContext.current
+    var softlockApps by remember { mutableStateOf(TempUnlockManager.getSoftlockApps()) }
+    var hardlockApps by remember { mutableStateOf(TempUnlockManager.getHardlockApps()) }
+    var showAppPicker by remember { mutableStateOf(false) }
+    var selectedApps by remember { mutableStateOf(setOf<String>()) }
+    
+    fun refreshLists() {
+        softlockApps = TempUnlockManager.getSoftlockApps()
+        hardlockApps = TempUnlockManager.getHardlockApps()
+    }
+    
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Text(
+                text = "⚙️ Quản lý danh sách khóa",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+            
+            // ========== ADD MULTIPLE APPS BUTTON ==========
+            Button(
+                onClick = { showAppPicker = true },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF4CAF50)
+                )
+            ) {
+                Text("📱 Chọn nhiều app để block", fontWeight = FontWeight.Bold)
+            }
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            // ========== SOFTLOCK LIST ==========
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFFE3F2FD).copy(alpha = 0.5f)
+                )
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        text = "🔓 Softlock: ${softlockApps.size} apps",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    
+                    if (softlockApps.isEmpty()) {
+                        Text("(Chưa có app nào)", fontSize = 12.sp, color = Color.Gray)
+                    } else {
+                        softlockApps.forEach { pkg ->
+                            BlockedAppRow(
+                                packageName = pkg,
+                                onMoveClick = {
+                                    TempUnlockManager.moveToHardlock(pkg)
+                                    refreshLists()
+                                    context.popToast("→ Hardlock: $pkg")
+                                },
+                                onRemoveClick = {
+                                    TempUnlockManager.removeFromSoftlock(pkg)
+                                    TempUnlockManager.unsuspendApp(pkg)
+                                    refreshLists()
+                                    context.popToast("Đã gỡ: $pkg")
+                                },
+                                moveButtonText = "→🔒",
+                                moveButtonColor = Color(0xFFB71C1C)
+                            )
+                        }
+                    }
+                }
+            }
+            
+            // ========== HARDLOCK LIST ==========
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(8.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFFFFEBEE).copy(alpha = 0.5f)
+                )
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        text = "🔒 Hardlock: ${hardlockApps.size} apps",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    
+                    if (hardlockApps.isEmpty()) {
+                        Text("(Chưa có app nào)", fontSize = 12.sp, color = Color.Gray)
+                    } else {
+                        hardlockApps.forEach { pkg ->
+                            BlockedAppRow(
+                                packageName = pkg,
+                                onMoveClick = {
+                                    TempUnlockManager.moveToSoftlock(pkg)
+                                    refreshLists()
+                                    context.popToast("→ Softlock: $pkg")
+                                },
+                                onRemoveClick = {
+                                    TempUnlockManager.removeFromHardlock(pkg)
+                                    TempUnlockManager.unsuspendApp(pkg)
+                                    refreshLists()
+                                    context.popToast("Đã gỡ: $pkg")
+                                },
+                                moveButtonText = "→🔓",
+                                moveButtonColor = Color(0xFF1976D2)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // ========== MULTI-SELECT APP PICKER DIALOG ==========
+    if (showAppPicker) {
+        MultiSelectAppPickerDialog(
+            selectedApps = selectedApps,
+            onSelectionChange = { selectedApps = it },
+            onDismiss = { 
+                showAppPicker = false 
+                selectedApps = emptySet()
+            },
+            onBlockAsSoftlock = {
+                selectedApps.forEach { pkg ->
+                    TempUnlockManager.addToSoftlock(pkg)
+                    TempUnlockManager.suspendApp(pkg)
+                }
+                context.popToast("Đã thêm ${selectedApps.size} apps vào Softlock")
+                refreshLists()
+                showAppPicker = false
+                selectedApps = emptySet()
+            },
+            onBlockAsHardlock = {
+                selectedApps.forEach { pkg ->
+                    TempUnlockManager.addToHardlock(pkg)
+                    TempUnlockManager.suspendApp(pkg)
+                }
+                context.popToast("Đã thêm ${selectedApps.size} apps vào Hardlock")
+                refreshLists()
+                showAppPicker = false
+                selectedApps = emptySet()
+            }
+        )
+    }
+}
+
+/**
+ * Row displaying a blocked app with move and remove buttons
+ */
+@Composable
+private fun BlockedAppRow(
+    packageName: String,
+    onMoveClick: () -> Unit,
+    onRemoveClick: () -> Unit,
+    moveButtonText: String,
+    moveButtonColor: Color
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = packageName,
+            fontSize = 11.sp,
+            modifier = Modifier.weight(1f)
+        )
+        Row {
+            Button(
+                onClick = onMoveClick,
+                modifier = Modifier.height(28.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = moveButtonColor)
+            ) {
+                Text(moveButtonText, fontSize = 10.sp)
+            }
+            Spacer(modifier = Modifier.width(4.dp))
+            Button(
+                onClick = onRemoveClick,
+                modifier = Modifier.height(28.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color.Gray)
+            ) {
+                Text("✕", fontSize = 10.sp)
+            }
+        }
+    }
+}
+
+/**
+ * Dialog for multi-selecting apps to block
+ */
+@Composable
+private fun MultiSelectAppPickerDialog(
+    selectedApps: Set<String>,
+    onSelectionChange: (Set<String>) -> Unit,
+    onDismiss: () -> Unit,
+    onBlockAsSoftlock: () -> Unit,
+    onBlockAsHardlock: () -> Unit
+) {
+    val context = LocalContext.current
+    val pm = context.packageManager
+    var searchQuery by remember { mutableStateOf("") }
+    var installedApps by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    
+    // Load installed apps
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val apps = pm.getInstalledApplications(
+                android.content.pm.PackageManager.MATCH_DISABLED_COMPONENTS or 
+                android.content.pm.PackageManager.MATCH_UNINSTALLED_PACKAGES
+            ).map { appInfo ->
+                val label = try { appInfo.loadLabel(pm).toString() } catch (e: Exception) { appInfo.packageName }
+                appInfo.packageName to label
+            }.sortedBy { it.second.lowercase() }
+            installedApps = apps
+            isLoading = false
+        }
+    }
+    
+    val filteredApps = installedApps.filter { (pkg, label) ->
+        searchQuery.isEmpty() || 
+        pkg.contains(searchQuery, ignoreCase = true) || 
+        label.contains(searchQuery, ignoreCase = true)
+    }
+    
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(500.dp),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                // Header
+                Text(
+                    text = "Chọn apps để block (${selectedApps.size} đã chọn)",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                
+                // Search
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    label = { Text("Tìm kiếm...") },
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    singleLine = true
+                )
+                
+                // App list with checkboxes
+                if (isLoading) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                } else {
+                    androidx.compose.foundation.lazy.LazyColumn(
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        items(filteredApps.size) { index ->
+                            val (pkg, label) = filteredApps[index]
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        val newSelection = if (selectedApps.contains(pkg)) {
+                                            selectedApps - pkg
+                                        } else {
+                                            selectedApps + pkg
+                                        }
+                                        onSelectionChange(newSelection)
+                                    }
+                                    .padding(vertical = 8.dp, horizontal = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                androidx.compose.material3.Checkbox(
+                                    checked = selectedApps.contains(pkg),
+                                    onCheckedChange = { checked ->
+                                        val newSelection = if (checked) {
+                                            selectedApps + pkg
+                                        } else {
+                                            selectedApps - pkg
+                                        }
+                                        onSelectionChange(newSelection)
+                                    }
+                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(text = label, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                    Text(text = pkg, fontSize = 10.sp, color = Color.Gray)
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                // Action buttons
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    Button(
+                        onClick = onBlockAsSoftlock,
+                        modifier = Modifier.weight(1f),
+                        enabled = selectedApps.isNotEmpty(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2))
+                    ) {
+                        Text("Softlock", fontSize = 12.sp)
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = onBlockAsHardlock,
+                        modifier = Modifier.weight(1f),
+                        enabled = selectedApps.isNotEmpty(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB71C1C))
+                    ) {
+                        Text("Hardlock", fontSize = 12.sp)
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Gray)
+                ) {
+                    Text("Đóng")
                 }
             }
         }

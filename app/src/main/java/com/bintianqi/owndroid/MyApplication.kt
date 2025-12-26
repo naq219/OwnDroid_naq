@@ -15,4 +15,10 @@ class MyApplication : Application() {
 }
 
 lateinit var SP: SharedPrefs
-    private set
+    internal set
+
+/**
+ * Helper function to check if SP is initialized.
+ * Needed because the backing field of lateinit var is not accessible outside this file.
+ */
+fun isSPInitialized(): Boolean = ::SP.isInitialized
