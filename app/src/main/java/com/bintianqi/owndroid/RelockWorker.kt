@@ -19,7 +19,8 @@ class RelockWorker(
     }
     
     override fun doWork(): Result {
-        Log.d(TAG, "RelockWorker started - doWork()")
+        Log.d(TAG, "========== RelockWorker STARTED ==========")
+        Log.d(TAG, "Time: ${java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date())}")
         return try {
             // Ensure SP is initialized (in case app was killed)
             if (!isSPInitialized()) {
@@ -27,17 +28,23 @@ class RelockWorker(
                 Log.d(TAG, "SP initialized in worker")
             }
             
+            Log.d(TAG, "SP.isTempUnlockActive = ${SP.isTempUnlockActive}")
+            Log.d(TAG, "SP.tempUnlockEndTime = ${SP.tempUnlockEndTime}")
+            
             // Ensure Privilege is initialized
             Privilege.initialize(applicationContext)
             Privilege.updateStatus()
-            Log.d(TAG, "Privilege initialized in worker")
+            Log.d(TAG, "Privilege initialized. DPM active = ${Privilege.DPM != null}")
             
             // Execute relock
+            Log.d(TAG, "Calling deactivateTempUnlock...")
             TempUnlockManager.deactivateTempUnlock(applicationContext)
-            Log.d(TAG, "RelockWorker completed successfully")
+            
+            Log.d(TAG, "========== RelockWorker COMPLETED ==========")
             Result.success()
         } catch (e: Exception) {
-            Log.e(TAG, "RelockWorker failed", e)
+            Log.e(TAG, "========== RelockWorker FAILED ==========")
+            Log.e(TAG, "Error: ${e.message}", e)
             e.printStackTrace()
             Result.failure()
         }

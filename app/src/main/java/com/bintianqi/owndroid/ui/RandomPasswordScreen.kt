@@ -135,6 +135,15 @@ fun RandomPasswordScreen(onSucceed: () -> Unit) {
     ) {
         Spacer(modifier = Modifier.height(32.dp))
         
+        // Version display
+        val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+        Text(
+            text = "v${packageInfo.versionName} (${packageInfo.longVersionCode})",
+            fontSize = 12.sp,
+            color = Color.Gray,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        
         // ============= TEMP UNLOCK STATUS CARD =============
         TempUnlockStatusCard(
             successfulAttempts = successfulAttempts,
@@ -427,7 +436,7 @@ private fun TempUnlockStatusCard(
     remainingTimeMillis: Long,
     onActivateUnlock: () -> Unit
 ) {
-    val canUnlock = successfulAttempts >= TOTAL_ATTEMPTS_TEMP
+    val canUnlock = true // TEST: Always show unlock button
     val isNightMode = TempUnlockManager.isNightMode()
     val nightModeMinutesRemaining = TempUnlockManager.getMinutesUntilNightModeEnds()
     
@@ -583,7 +592,7 @@ private fun TempUnlockStatusCard(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "TẠM MỞ KHÓA 10 PHÚT",
+                            text = "TẠM MỞ KHÓA 1 PHÚT", // TEST
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp
                         )

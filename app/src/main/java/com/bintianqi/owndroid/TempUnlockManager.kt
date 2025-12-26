@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit
 object TempUnlockManager {
     
     private const val TAG = "TempUnlockManager"
-    private const val TEMP_UNLOCK_DURATION_MINUTES = 10L
+    private const val TEMP_UNLOCK_DURATION_MINUTES = 1L // TEST: 1 minute
     private const val WORK_NAME = "temp_unlock_relock"
     
     // Night mode hours (22:00 - 07:00)
@@ -36,9 +36,13 @@ object TempUnlockManager {
      * Get list of softlock apps (can be unlocked during temp unlock)
      */
     fun getSoftlockApps(): List<String> {
-        val jsonStr = SP.softlockApps ?: return emptyList()
+        val jsonStr = SP.softlockApps
+        Log.d(TAG, "getSoftlockApps: raw SP.softlockApps = $jsonStr")
+        if (jsonStr == null) return emptyList()
         return try {
-            json.decodeFromString(jsonStr)
+            val result: List<String> = json.decodeFromString(jsonStr)
+            Log.d(TAG, "getSoftlockApps: parsed = $result")
+            result
         } catch (e: Exception) {
             Log.e(TAG, "Error parsing softlock apps", e)
             emptyList()
@@ -159,6 +163,21 @@ object TempUnlockManager {
     }
     
     /**
+     * Unhide a single app (make it visible in launcher again)
+     */
+    fun unhideApp(packageName: String): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
+        return try {
+            val success = Privilege.DPM.setApplicationHidden(Privilege.DAR, packageName, false)
+            Log.d(TAG, "Unhide $packageName: ${if (success) "OK" else "FAILED"}")
+            success
+        } catch (e: Exception) {
+            Log.e(TAG, "Error unhiding $packageName", e)
+            false
+        }
+    }
+    
+    /**
      * Lock all apps in softlock list (suspend them)
      */
     fun lockAllSoftlockApps() {
@@ -226,12 +245,12 @@ object TempUnlockManager {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 // 1. Unlock all SOFTLOCK apps only
                 val softlockApps = getSoftlockApps()
+                Log.d(TAG, "Temp unlock: softlockApps = $softlockApps")
                 Log.d(TAG, "Temp unlock: unlocking ${softlockApps.size} softlock apps")
-                
                 for (pkg in softlockApps) {
-                    if (unsuspendApp(pkg)) {
-                        unlockedCount++
-                    }
+                    unsuspendApp(pkg)
+                    unhideApp(pkg)
+                    unlockedCount++
                 }
                 
                 // 2. Clear install apps restriction
@@ -267,48 +286,64 @@ object TempUnlockManager {
      * HARDLOCK apps are not affected (they're always locked)
      */
     fun deactivateTempUnlock(context: Context) {
-        Log.d(TAG, "Deactivating temp unlock...")
+        Log.d(TAG, "========== deactivateTempUnlock START ==========")
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 // 1. Re-lock all SOFTLOCK apps
+                Log.d(TAG, "Step 1: Locking all softlock apps...")
                 lockAllSoftlockApps()
+                Log.d(TAG, "Step 1: DONE")
                 
                 val naqdns = "naq.dns"
                 
                 // 2. Re-add install apps restriction
+                Log.d(TAG, "Step 2: Adding DISALLOW_INSTALL_APPS restriction...")
                 Privilege.DPM.addUserRestriction(Privilege.DAR, UserManager.DISALLOW_INSTALL_APPS)
+                Log.d(TAG, "Step 2: DONE")
                 
                 // 3. Re-set always-on VPN
+                Log.d(TAG, "Step 3: Setting VPN to $naqdns...")
                 val allowlist: MutableSet<String?> = HashSet()
                 allowlist.add("com.facebook.adsmanager")
                 allowlist.add("com.facebook.orca")
                 allowlist.add("com.facebook.pages.app")
                 Privilege.DPM.setAlwaysOnVpnPackage(Privilege.DAR, naqdns, false, allowlist)
+                Log.d(TAG, "Step 3: VPN SET DONE")
                 
                 // 4. Re-add VPN config restriction
+                Log.d(TAG, "Step 4: Adding DISALLOW_CONFIG_VPN...")
                 Privilege.DPM.addUserRestriction(Privilege.DAR, UserManager.DISALLOW_CONFIG_VPN)
+                Log.d(TAG, "Step 4: DONE")
                 
                 // 5. Re-add private DNS config restriction
+                Log.d(TAG, "Step 5: Adding DISALLOW_CONFIG_PRIVATE_DNS...")
                 Privilege.DPM.addUserRestriction(Privilege.DAR, UserManager.DISALLOW_CONFIG_PRIVATE_DNS)
+                Log.d(TAG, "Step 5: DONE")
                 
                 // 6. Block uninstall for VPN app
+                Log.d(TAG, "Step 6: Block uninstall for $naqdns...")
                 Privilege.DPM.setUninstallBlocked(Privilege.DAR, naqdns, true)
+                Log.d(TAG, "Step 6: DONE")
                 
                 // 7. Disable user control for VPN app
+                Log.d(TAG, "Step 7: Disable user control...")
                 val current = Privilege.DPM.getUserControlDisabledPackages(Privilege.DAR)
                 if (!current.contains(naqdns)) {
                     Privilege.DPM.setUserControlDisabledPackages(Privilege.DAR, current.plus(naqdns))
                 }
+                Log.d(TAG, "Step 7: DONE")
             }
             
             // Clear unlock state
+            Log.d(TAG, "Clearing unlock state...")
             SP.tempUnlockEndTime = 0L
             SP.isTempUnlockActive = false
             
-            Log.d(TAG, "Temp unlock deactivated")
+            Log.d(TAG, "========== deactivateTempUnlock COMPLETED ==========")
             
         } catch (e: Exception) {
-            Log.e(TAG, "Error deactivating temp unlock", e)
+            Log.e(TAG, "========== deactivateTempUnlock FAILED ==========")
+            Log.e(TAG, "Error: ${e.message}", e)
         }
     }
     
@@ -329,9 +364,9 @@ object TempUnlockManager {
     }
     
     private fun scheduleRelockWorker(context: Context) {
+        // NOTE: Cannot use setExpedited() with setInitialDelay() - they are mutually exclusive
         val relockRequest = OneTimeWorkRequestBuilder<RelockWorker>()
             .setInitialDelay(TEMP_UNLOCK_DURATION_MINUTES, TimeUnit.MINUTES)
-            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             .build()
         
         WorkManager.getInstance(context)

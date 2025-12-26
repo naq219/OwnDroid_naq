@@ -66,7 +66,7 @@ android {
             output.outputFileName = "${versionCode}${buildTypeSuffix}-${packageName}-i${counter}.apk"
 
             // Tăng counter và lưu lại
-            counterFile.writeText((counter + 1).toString())
+           // counterFile.writeText((counter + 1).toString())
         }
     }
 
