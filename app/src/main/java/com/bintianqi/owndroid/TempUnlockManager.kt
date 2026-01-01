@@ -22,6 +22,7 @@ object TempUnlockManager {
     
     private const val TAG = "TempUnlockManager"
     private val TEMP_UNLOCK_DURATION_MINUTES = AppConfig.TEMP_UNLOCK_DURATION_MINUTES
+    private val DAY_UNLOCK_DURATION_MINUTES = AppConfig.DAY_UNLOCK_DURATION_MINUTES
     private const val WORK_NAME = "temp_unlock_relock"
     
     // Night mode hours from config
@@ -240,13 +241,35 @@ object TempUnlockManager {
      * - Schedules auto-relock via WorkManager
      */
     fun activateTempUnlock(context: Context): Int {
+        return activateUnlock(context, TEMP_UNLOCK_DURATION_MINUTES)
+    }
+    
+    /**
+     * Activate day unlock for 24 hours.
+     * - Unlocks all SOFTLOCK apps (unsuspend)
+     * - HARDLOCK apps remain locked
+     * - Clears restrictions
+     * - Schedules auto-relock via WorkManager after 24 hours
+     */
+    fun activateDayUnlock(context: Context): Int {
+        return activateUnlock(context, DAY_UNLOCK_DURATION_MINUTES)
+    }
+    
+    /**
+     * Internal function to activate unlock for specified duration.
+     * - Unlocks all SOFTLOCK apps (unsuspend)
+     * - HARDLOCK apps remain locked
+     * - Clears restrictions
+     * - Schedules auto-relock via WorkManager
+     */
+    private fun activateUnlock(context: Context, durationMinutes: Long): Int {
         var unlockedCount = 0
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 // 1. Unlock all SOFTLOCK apps only
                 val softlockApps = getSoftlockApps()
-                Log.d(TAG, "Temp unlock: softlockApps = $softlockApps")
-                Log.d(TAG, "Temp unlock: unlocking ${softlockApps.size} softlock apps")
+                Log.d(TAG, "Unlock ($durationMinutes min): softlockApps = $softlockApps")
+                Log.d(TAG, "Unlock: unlocking ${softlockApps.size} softlock apps")
                 for (pkg in softlockApps) {
                     unsuspendApp(pkg)
                     unhideApp(pkg)
@@ -267,16 +290,16 @@ object TempUnlockManager {
             }
             
             // Save unlock end time
-            SP.tempUnlockEndTime = System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(TEMP_UNLOCK_DURATION_MINUTES)
+            SP.tempUnlockEndTime = System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(durationMinutes)
             SP.isTempUnlockActive = true
             
             // Schedule relock worker
-            scheduleRelockWorker(context)
+            scheduleRelockWorker(context, durationMinutes)
             
-            Log.d(TAG, "Temp unlock activated, unlocked $unlockedCount apps")
+            Log.d(TAG, "Unlock activated for $durationMinutes min, unlocked $unlockedCount apps")
             
         } catch (e: Exception) {
-            Log.e(TAG, "Error activating temp unlock", e)
+            Log.e(TAG, "Error activating unlock", e)
         }
         return unlockedCount
     }
@@ -360,16 +383,16 @@ object TempUnlockManager {
         return SP.tempUnlockEndTime - System.currentTimeMillis()
     }
     
-    private fun scheduleRelockWorker(context: Context) {
+    private fun scheduleRelockWorker(context: Context, durationMinutes: Long = TEMP_UNLOCK_DURATION_MINUTES) {
         // NOTE: Cannot use setExpedited() with setInitialDelay() - they are mutually exclusive
         val relockRequest = OneTimeWorkRequestBuilder<RelockWorker>()
-            .setInitialDelay(TEMP_UNLOCK_DURATION_MINUTES, TimeUnit.MINUTES)
+            .setInitialDelay(durationMinutes, TimeUnit.MINUTES)
             .build()
         
         WorkManager.getInstance(context)
             .enqueueUniqueWork(WORK_NAME, ExistingWorkPolicy.REPLACE, relockRequest)
         
-        Log.d(TAG, "Scheduled RelockWorker to run in $TEMP_UNLOCK_DURATION_MINUTES minutes")
+        Log.d(TAG, "Scheduled RelockWorker to run in $durationMinutes minutes")
     }
     
     /**

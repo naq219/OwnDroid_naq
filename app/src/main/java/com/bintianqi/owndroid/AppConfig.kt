@@ -15,16 +15,26 @@ object AppConfig {
     const val ATTEMPTS_FOR_SETTINGS = 50
     
     /**
-     * Number of password attempts required to enable temporary unlock
+     * Number of password attempts required to enable temporary unlock (10 minutes)
      */
     const val ATTEMPTS_FOR_TEMP_UNLOCK = 6
+    
+    /**
+     * Number of password attempts required to enable day unlock (24 hours)
+     */
+    const val ATTEMPTS_FOR_DAY_UNLOCK = 25
     
     // ============= TEMP UNLOCK =============
     
     /**
-     * Duration of temporary unlock in minutes
+     * Duration of temporary unlock in minutes (10 minutes)
      */
     const val TEMP_UNLOCK_DURATION_MINUTES = 10L
+    
+    /**
+     * Duration of day unlock in minutes (24 hours)
+     */
+    const val DAY_UNLOCK_DURATION_MINUTES = 24 * 60L
     
     // ============= NIGHT MODE =============
     

@@ -68,6 +68,7 @@ object RandomPasswordScreen
 val MAX_UNLOCK_APK= 1
 private val TOTAL_ATTEMPTS = AppConfig.ATTEMPTS_FOR_SETTINGS
 private val TOTAL_ATTEMPTS_TEMP = AppConfig.ATTEMPTS_FOR_TEMP_UNLOCK
+private val TOTAL_ATTEMPTS_DAY = AppConfig.ATTEMPTS_FOR_DAY_UNLOCK
 
 @Composable
 fun RandomPasswordScreen(onSucceed: () -> Unit) {
@@ -150,13 +151,27 @@ fun RandomPasswordScreen(onSucceed: () -> Unit) {
             successfulAttempts = successfulAttempts,
             isTempUnlockActive = isTempUnlockActive,
             remainingTimeMillis = remainingTimeMillis,
-            onActivateUnlock = {
+            onActivateTempUnlock = {
                 TempUnlockManager.activateTempUnlock(context)
                 isTempUnlockActive = true
                 remainingTimeMillis = TempUnlockManager.getRemainingTimeMillis()
                 // Reset attempts so user must re-enter passwords for next unlock
                 successfulAttempts = 0
                 context.popToast("Đã mở khóa tạm thời 10 phút!")
+            },
+            onActivateDayUnlock = {
+                TempUnlockManager.activateDayUnlock(context)
+                isTempUnlockActive = true
+                remainingTimeMillis = TempUnlockManager.getRemainingTimeMillis()
+                // Reset attempts so user must re-enter passwords for next unlock
+                successfulAttempts = 0
+                context.popToast("Đã mở khóa 1 NGÀY (24 giờ)!")
+            },
+            onLockNow = {
+                TempUnlockManager.deactivateTempUnlock(context)
+                isTempUnlockActive = false
+                remainingTimeMillis = 0L
+                context.popToast("Đã khóa lại!")
             }
         )
         
@@ -415,15 +430,21 @@ private fun generateRandomString(length: Int): String {
 
 /**
  * Status card showing temp unlock state with countdown timer
+ * Shows different unlock buttons based on successful attempts:
+ * - 6 attempts: 10 minute unlock button
+ * - 25 attempts: 1 day (24 hours) unlock button (replaces 10 min button)
  */
 @Composable
 private fun TempUnlockStatusCard(
     successfulAttempts: Int,
     isTempUnlockActive: Boolean,
     remainingTimeMillis: Long,
-    onActivateUnlock: () -> Unit
+    onActivateTempUnlock: () -> Unit,
+    onActivateDayUnlock: () -> Unit,
+    onLockNow: () -> Unit
 ) {
-    val canUnlock = successfulAttempts >= TOTAL_ATTEMPTS_TEMP
+    val canUnlockTemp = successfulAttempts >= TOTAL_ATTEMPTS_TEMP
+    val canUnlockDay = successfulAttempts >= TOTAL_ATTEMPTS_DAY
     val isNightMode = TempUnlockManager.isNightMode()
     val nightModeMinutesRemaining = TempUnlockManager.getMinutesUntilNightModeEnds()
     
@@ -434,7 +455,8 @@ private fun TempUnlockStatusCard(
             containerColor = when {
                 isNightMode && !isTempUnlockActive -> Color(0xFF1A237E).copy(alpha = 0.15f) // Dark blue tint for night
                 isTempUnlockActive -> Color(0xFF1B5E20).copy(alpha = 0.15f) // Green tint
-                canUnlock -> Color(0xFFE65100).copy(alpha = 0.15f) // Orange tint
+                canUnlockDay -> Color(0xFF1565C0).copy(alpha = 0.15f) // Blue tint for day unlock
+                canUnlockTemp -> Color(0xFFE65100).copy(alpha = 0.15f) // Orange tint
                 else -> MaterialTheme.colorScheme.surfaceVariant
             }
         )
@@ -448,9 +470,18 @@ private fun TempUnlockStatusCard(
             when {
                 // UNLOCKED STATE - Show countdown (even during night mode, if already unlocked)
                 isTempUnlockActive -> {
-                    val minutes = (remainingTimeMillis / 1000 / 60).toInt()
+                    val totalMinutes = (remainingTimeMillis / 1000 / 60).toInt()
+                    val hours = totalMinutes / 60
+                    val minutes = totalMinutes % 60
                     val seconds = ((remainingTimeMillis / 1000) % 60).toInt()
-                    val progress = remainingTimeMillis.toFloat() / (10 * 60 * 1000)
+                    
+                    // Determine if this is a day unlock (>10 min remaining initially means day unlock)
+                    val isDayUnlock = remainingTimeMillis > (AppConfig.TEMP_UNLOCK_DURATION_MINUTES * 60 * 1000)
+                    val maxDuration = if (isDayUnlock) 
+                        AppConfig.DAY_UNLOCK_DURATION_MINUTES * 60 * 1000 
+                    else 
+                        AppConfig.TEMP_UNLOCK_DURATION_MINUTES * 60 * 1000
+                    val progress = remainingTimeMillis.toFloat() / maxDuration
                     
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -459,20 +490,27 @@ private fun TempUnlockStatusCard(
                         Icon(
                             painter = painterResource(R.drawable.lock_open_fill0),
                             contentDescription = null,
-                            tint = Color(0xFF2E7D32),
+                            tint = if (isDayUnlock) Color(0xFF1565C0) else Color(0xFF2E7D32),
                             modifier = Modifier.size(32.dp)
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = "ĐÃ MỞ KHÓA TẠM THỜI",
+                            text = if (isDayUnlock) "ĐÃ MỞ KHÓA 1 NGÀY" else "ĐÃ MỞ KHÓA TẠM THỜI",
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF2E7D32)
+                            color = if (isDayUnlock) Color(0xFF1565C0) else Color(0xFF2E7D32)
                         )
                     }
                     
+                    // Show time in format appropriate for duration
+                    val timeText = if (hours > 0) {
+                        "⏱️ Còn lại: ${hours}h ${minutes}m ${seconds.toString().padStart(2, '0')}s"
+                    } else {
+                        "⏱️ Còn lại: ${minutes}:${seconds.toString().padStart(2, '0')}"
+                    }
+                    
                     Text(
-                        text = "⏱️ Còn lại: ${minutes}:${seconds.toString().padStart(2, '0')}",
+                        text = timeText,
                         fontSize = 24.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -485,7 +523,7 @@ private fun TempUnlockStatusCard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(8.dp),
-                        color = Color(0xFF4CAF50),
+                        color = if (isDayUnlock) Color(0xFF1976D2) else Color(0xFF4CAF50),
                         trackColor = Color(0xFFE0E0E0)
                     )
                     
@@ -497,6 +535,30 @@ private fun TempUnlockStatusCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
                     )
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    // Lock Now button
+                    Button(
+                        onClick = onLockNow,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFB71C1C)
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.lock_fill0),
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "KHÓA NGAY",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                    }
                 }
                 
                 // NIGHT MODE - Block unlock
@@ -543,8 +605,51 @@ private fun TempUnlockStatusCard(
                     )
                 }
                 
-                // CAN UNLOCK - Show unlock button
-                canUnlock -> {
+                // CAN UNLOCK DAY (25 attempts) - Show day unlock button (REPLACES 10 min button)
+                canUnlockDay -> {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.lock_fill0),
+                            contentDescription = null,
+                            tint = Color(0xFF1565C0),
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "🎉 Đủ $TOTAL_ATTEMPTS_DAY lần!",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF1565C0)
+                        )
+                    }
+                    
+                    Button(
+                        onClick = onActivateDayUnlock,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF1976D2)
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.lock_open_fill0),
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "MỞ KHÓA 1 NGÀY",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                    }
+                }
+                
+                // CAN UNLOCK TEMP (6 attempts) - Show 10 min unlock button
+                canUnlockTemp -> {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(bottom = 12.dp)
@@ -565,7 +670,7 @@ private fun TempUnlockStatusCard(
                     }
                     
                     Button(
-                        onClick = onActivateUnlock,
+                        onClick = onActivateTempUnlock,
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color(0xFFFF6D00)
@@ -584,6 +689,15 @@ private fun TempUnlockStatusCard(
                             fontSize = 16.sp
                         )
                     }
+                    
+                    // Show hint for day unlock
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "💡 Nhập thêm ${TOTAL_ATTEMPTS_DAY - successfulAttempts} lần để mở khóa 1 NGÀY",
+                        fontSize = 12.sp,
+                        color = Color(0xFF1565C0),
+                        textAlign = TextAlign.Center
+                    )
                 }
                 
                 // LOCKED - Show progress
