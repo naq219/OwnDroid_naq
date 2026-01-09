@@ -27,7 +27,7 @@ object AppConfig {
     
     // Day mode tiers (07:00 - 22:00)
     val DAY_TIERS = listOf(
-        UnlockTier(1 , 10,   5,  "10 PHÚT"),
+        UnlockTier(1 , 10,   7,  "10 PHÚT"),
         UnlockTier(10,  15,   1,  "15 PHÚT"),
         UnlockTier(25, 1440, 5,  "1 NGÀY")
     )
@@ -65,7 +65,7 @@ object AppConfig {
           whitelist.add("naq.dns")
            whitelist.add("vn.com.techcombank.bb.app")
             whitelist.add("com.vnid")
-
+    whitelist.add("vn.com.vetc.app")
               whitelist.add("com.vnid")
                 whitelist.add("com.vnpay.vpbankonline")
          whitelist.add("com.twofasapp")       
@@ -74,9 +74,29 @@ object AppConfig {
         return whitelist
     }
     
+
+    // ============= DEFAULT BLOCK LISTS =============
+    
+    val DEFAULT_SOFT_BLOCK_APPS = listOf(
+        "com.facebook.katana",      // Facebook
+       
+        "com.google.android.youtube", // YouTube
+        "com.ss.android.ugc.trill", // TikTok
+        "com.instagram.android",    // Instagram
+        "com.zhiliaoapp.musically", // TikTok Global
+        "com.google.android.apps.youtube.kids", // YouTube Kids
+        "com.netflix.mediaclient"   // Netflix
+    )
+    
+    val DEFAULT_HARD_BLOCK_APPS = listOf<String>(
+
+        "com.scaleup.dreame"
+
+    ) // Empty by default
+    
     // ============= SETTINGS =============
     
-    const val ATTEMPTS_FOR_SETTINGS = 3
+    const val ATTEMPTS_FOR_SETTINGS = 50
     
     // Legacy constants for backward compatibility
     const val ATTEMPTS_FOR_TEMP_UNLOCK = 6

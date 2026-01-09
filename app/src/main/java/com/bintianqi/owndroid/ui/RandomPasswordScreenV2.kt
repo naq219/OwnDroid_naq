@@ -121,7 +121,7 @@ fun RandomPasswordScreenV2(onSucceed: () -> Unit) {
             return
         }
         
-        if (input == randomString) {
+        if (input.equals(randomString, ignoreCase = true)) {
             successfulAttempts++
             if (successfulAttempts >= TOTAL_ATTEMPTS) {
                 focusManager.clearFocus()
@@ -142,12 +142,54 @@ fun RandomPasswordScreenV2(onSucceed: () -> Unit) {
         onDispose { }
     }
 
-    // First run bypass
+    // First run bypass + Default config
     LaunchedEffect(Unit) {
         if (SP.lastAuthTime == 0L) {
-            successfulAttempts = TOTAL_ATTEMPTS
-            SP.lastAuthTime = System.currentTimeMillis()
-            onSucceed()
+            // Maxwell: Apply default config on first run
+            
+            // 1. Soft Block Defaults
+            if (TempUnlockManager.getSoftlockApps().isEmpty()) {
+                val defaults = AppConfig.DEFAULT_SOFT_BLOCK_APPS
+                Log.d("RandomPasswordScreenV2", "First Run: Applying default Soft Block list: $defaults")
+                // Save to SP
+                defaults.forEach { TempUnlockManager.addToSoftlock(it) }
+                // Apply Suspend immediately
+                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                    com.bintianqi.owndroid.Privilege.DPM.setPackagesSuspended(
+                        com.bintianqi.owndroid.Privilege.DAR, 
+                        defaults.toTypedArray(), 
+                        true
+                    )
+                 }
+            }
+            
+            // 2. Hard Block Defaults (Empty by default but safe to handle)
+            if (TempUnlockManager.getHardlockApps().isEmpty()) {
+                val defaults = AppConfig.DEFAULT_HARD_BLOCK_APPS
+                Log.d("RandomPasswordScreenV2", "First Run: Applying default Hard Block list: $defaults")
+                // Save to SP
+                defaults.forEach { TempUnlockManager.addToHardlock(it) }
+                // Apply Suspend + Hide immediately
+                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                    com.bintianqi.owndroid.Privilege.DPM.setPackagesSuspended(
+                        com.bintianqi.owndroid.Privilege.DAR, 
+                        defaults.toTypedArray(), 
+                        true
+                    )
+                    defaults.forEach { pkg ->
+                        com.bintianqi.owndroid.Privilege.DPM.setApplicationHidden(
+                            com.bintianqi.owndroid.Privilege.DAR, 
+                            pkg, 
+                            true
+                        )
+                    }
+                 }
+            }
+            
+            // Bypass logic REMOVED as per user request (Must login even on first run)
+            // successfulAttempts = TOTAL_ATTEMPTS
+            // SP.lastAuthTime = System.currentTimeMillis()
+            // onSucceed()
         }
     }
     
