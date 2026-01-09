@@ -244,7 +244,7 @@ import com.bintianqi.owndroid.dpm.WorkProfile
 import com.bintianqi.owndroid.dpm.WorkProfileScreen
 import com.bintianqi.owndroid.dpm.dhizukuErrorStatus
 import com.bintianqi.owndroid.ui.Animations
-import com.bintianqi.owndroid.ui.RandomPasswordScreen
+import com.bintianqi.owndroid.ui.RandomPasswordScreenV2
 import com.bintianqi.owndroid.ui.theme.OwnDroidTheme
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.Serializable
@@ -372,7 +372,7 @@ fun Home(vm: MyViewModel, onLock: () -> Unit) {
     ) {
         composable<Home> { HomeScreen(::navigate) }
         composable<Login> {
-            RandomPasswordScreen {
+            RandomPasswordScreenV2 {
                 navController.navigate(Home) {
                     popUpTo<Login> { inclusive = true }
                 }

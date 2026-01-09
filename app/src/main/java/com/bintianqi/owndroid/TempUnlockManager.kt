@@ -327,7 +327,7 @@ object TempUnlockManager {
                 // 3. Re-set always-on VPN
                 Log.d(TAG, "Step 3: Setting VPN to $vpnPackage...")
                 val allowlist: MutableSet<String?> = HashSet(AppConfig.VPN_ALLOWLIST)
-                Privilege.DPM.setAlwaysOnVpnPackage(Privilege.DAR, vpnPackage, false, allowlist)
+                Privilege.DPM.setAlwaysOnVpnPackage(Privilege.DAR, vpnPackage, true, allowlist)
                 Log.d(TAG, "Step 3: VPN SET DONE")
                 
                 // 4. Re-add VPN config restriction
@@ -400,6 +400,74 @@ object TempUnlockManager {
      */
     fun cancelRelock(context: Context) {
         WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
+    }
+    
+    // ============= BLOCK TIME =============
+    
+    /**
+     * Check if currently in block period
+     */
+    fun isBlocked(): Boolean {
+        val blockEnd = SP.blockEndTime
+        return blockEnd > 0 && System.currentTimeMillis() < blockEnd
+    }
+    
+    /**
+     * Get remaining block time in milliseconds
+     */
+    fun getRemainingBlockTimeMillis(): Long {
+        if (!isBlocked()) return 0L
+        return SP.blockEndTime - System.currentTimeMillis()
+    }
+    
+    /**
+     * Set block period
+     */
+    fun setBlockPeriod(blockMinutes: Long) {
+        if (blockMinutes > 0) {
+            SP.blockEndTime = System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(blockMinutes)
+            SP.lastUsedBlockMinutes = blockMinutes
+            Log.d(TAG, "Block period set for $blockMinutes minutes")
+        }
+    }
+    
+    /**
+     * Clear block period
+     */
+    fun clearBlockPeriod() {
+        SP.blockEndTime = 0L
+    }
+    
+    // ============= TIER-BASED UNLOCK =============
+    
+    /**
+     * Activate unlock with specified tier
+     */
+    fun activateWithTier(context: Context, tier: AppConfig.UnlockTier): Int {
+        // Clear any block period
+        clearBlockPeriod()
+        
+        // Save block minutes for when unlock expires
+        SP.lastUsedBlockMinutes = tier.blockMinutes
+        
+        // Calculate duration (-1 means until morning)
+        val durationMinutes = if (tier.unlockMinutes == -1L) {
+            getMinutesUntilNightModeEnds().toLong()
+        } else {
+            tier.unlockMinutes
+        }
+        
+        return activateUnlock(context, durationMinutes)
+    }
+    
+    /**
+     * Deactivate unlock with optional block time
+     */
+    fun deactivateWithBlock(context: Context, blockMinutes: Long = 0L) {
+        deactivateTempUnlock(context)
+        if (blockMinutes > 0) {
+            setBlockPeriod(blockMinutes)
+        }
     }
 }
 

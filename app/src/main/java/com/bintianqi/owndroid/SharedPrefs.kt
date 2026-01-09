@@ -41,6 +41,12 @@ class SharedPrefs(context: Context) {
     // Softlock apps - locked but CAN be unlocked during temp unlock
     // JSON array of package names: ["com.app1", "com.app2", ...]
     var softlockApps by StringSharedPref("lock.softlock_apps")
+    
+    // Block time - user cannot enter password until this timestamp
+    var blockEndTime by LongSharedPref("unlock.block_end_time", 0L)
+    
+    // Last block duration used (for relock worker)
+    var lastUsedBlockMinutes by LongSharedPref("unlock.last_block_minutes", 0L)
 }
 
 private class BooleanSharedPref(val key: String, val defValue: Boolean = false): ReadWriteProperty<SharedPrefs, Boolean> {

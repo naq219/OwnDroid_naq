@@ -36,9 +36,13 @@ class RelockWorker(
             Privilege.updateStatus()
             Log.d(TAG, "Privilege initialized. DPM active = ${Privilege.DPM != null}")
             
-            // Execute relock
-            Log.d(TAG, "Calling deactivateTempUnlock...")
-            TempUnlockManager.deactivateTempUnlock(applicationContext)
+            // Get block minutes from SharedPrefs (saved when unlock was activated)
+            val blockMinutes = SP.lastUsedBlockMinutes
+            Log.d(TAG, "Block minutes: $blockMinutes")
+            
+            // Execute relock with block time
+            Log.d(TAG, "Calling deactivateWithBlock($blockMinutes)...")
+            TempUnlockManager.deactivateWithBlock(applicationContext, blockMinutes)
             
             Log.d(TAG, "========== RelockWorker COMPLETED ==========")
             Result.success()
