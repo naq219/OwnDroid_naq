@@ -433,9 +433,9 @@ object TempUnlockManager {
                     }
                     
                     // Day Mode VPN Setup: Standard Allowlist, Lockdown TRUE
-                    Log.d(TAG, "Setting Day Mode VPN (Lockdown=TRUE)...")
+                    Log.d(TAG, "Setting Day Mode VPN (Lockdown=FALSE)...")
                     val allowlist: MutableSet<String?> = HashSet(AppConfig.VPN_ALLOWLIST)
-                    Privilege.DPM.setAlwaysOnVpnPackage(Privilege.DAR, vpnPackage, true, allowlist)
+                    Privilege.DPM.setAlwaysOnVpnPackage(Privilege.DAR, vpnPackage, false, allowlist)
                 }
 
                 // COMMON ACTIONS FOR BOTH MODES
