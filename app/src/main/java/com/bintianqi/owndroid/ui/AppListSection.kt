@@ -204,12 +204,16 @@ private fun AppListGroup(
                         
                         if (enabled) {
                             Row {
+                                 if (canRemove) {
+
                                 TextButton(
                                     onClick = { onMove(pkg) },
                                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                                 ) {
                                     Text(moveLabel, fontSize = 11.sp, color = moveColor)
                                 }
+                                }
+                                
                                 
                                 if (canRemove) {
                                     TextButton(

@@ -52,10 +52,31 @@ object AppConfig {
         "com.facebook.orca",
         "com.facebook.pages.app"
     )
+
+    /**
+     * Get whitelist of apps allowed during Night Mode
+     */
+    fun getNightModeWhitelist(): Set<String> {
+        // Start with VPN whitelist
+        val whitelist = VPN_ALLOWLIST.filterNotNull().toMutableSet()
+        // Add additional critical apps if needed
+        whitelist.add("com.android.vending") // Google Play Store
+         whitelist.add("com.vng.inputmethod.labankey")
+          whitelist.add("naq.dns")
+           whitelist.add("vn.com.techcombank.bb.app")
+            whitelist.add("com.vnid")
+
+              whitelist.add("com.vnid")
+                whitelist.add("com.vnpay.vpbankonline")
+         whitelist.add("com.twofasapp")       
+
+
+        return whitelist
+    }
     
     // ============= SETTINGS =============
     
-    const val ATTEMPTS_FOR_SETTINGS = 50
+    const val ATTEMPTS_FOR_SETTINGS = 3
     
     // Legacy constants for backward compatibility
     const val ATTEMPTS_FOR_TEMP_UNLOCK = 6

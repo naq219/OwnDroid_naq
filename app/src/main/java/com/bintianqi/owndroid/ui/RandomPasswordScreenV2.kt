@@ -1,5 +1,6 @@
 package com.bintianqi.owndroid.ui
 
+import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -140,6 +141,15 @@ fun RandomPasswordScreenV2(onSucceed: () -> Unit) {
         generateNewChallenge()
         onDispose { }
     }
+
+    // First run bypass
+    LaunchedEffect(Unit) {
+        if (SP.lastAuthTime == 0L) {
+            successfulAttempts = TOTAL_ATTEMPTS
+            SP.lastAuthTime = System.currentTimeMillis()
+            onSucceed()
+        }
+    }
     
     Column(
         modifier = Modifier
@@ -176,14 +186,17 @@ fun RandomPasswordScreenV2(onSucceed: () -> Unit) {
                 generateNewChallenge()
                 context.popToast("Đã mở khóa ${tier.label}!")
             },
-            onLockNow = { blockMinutes ->
-                TempUnlockManager.deactivateWithBlock(context, blockMinutes)
+            onLockNow = { _ ->
+                // Use stored block minutes from the tier used to unlock
+                // The UI argument is 0 because attempts are reset, so we rely on SP
+                val actualBlockMinutes = SP.lastUsedBlockMinutes
+                TempUnlockManager.deactivateWithBlock(context, actualBlockMinutes)
                 isUnlockActive = false
                 remainingUnlockMillis = 0L
-                if (blockMinutes > 0) {
+                if (actualBlockMinutes > 0) {
                     isBlocked = true
                     remainingBlockMillis = TempUnlockManager.getRemainingBlockTimeMillis()
-                    context.popToast("Đã khóa! Block $blockMinutes phút")
+                    context.popToast("Đã khóa! Block $actualBlockMinutes phút")
                 } else {
                     context.popToast("Đã khóa!")
                 }
@@ -218,6 +231,69 @@ fun RandomPasswordScreenV2(onSucceed: () -> Unit) {
             actionsEnabled = true,
             canRemove = canRemoveApps
         )
+        
+        Spacer(Modifier.height(24.dp))
+        
+        // TEST BUTTON: Enable Install Apps
+        Button(
+            onClick = { 
+                try {
+                    com.bintianqi.owndroid.Privilege.DPM.clearUserRestriction(
+                        com.bintianqi.owndroid.Privilege.DAR, 
+                        android.os.UserManager.DISALLOW_INSTALL_APPS
+                    )
+                    context.popToast("Allowed Install Apps")
+                } catch (e: Exception) {
+                    context.popToast("Failed: ${e.message}")
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+        ) {
+            Text("TEST: Cho phép cài ứng dụng")
+        }
+        
+        Spacer(Modifier.height(12.dp))
+        
+        // TEST BUTTON: Block Date/Time & Allow Install Apps & Protect Apps
+        Button(
+            onClick = { 
+                try {
+                    val dpm = com.bintianqi.owndroid.Privilege.DPM
+                    val admin = com.bintianqi.owndroid.Privilege.DAR
+                    val myPackage = context.packageName
+                    val dnsPackage = "naq.dns"
+
+                    // 1. Block Date/Time
+                    dpm.addUserRestriction(admin, android.os.UserManager.DISALLOW_CONFIG_DATE_TIME)
+                    
+                    // 2. Allow Install Apps
+                    dpm.clearUserRestriction(admin, android.os.UserManager.DISALLOW_INSTALL_APPS)
+                    
+                    // 3. Block Uninstall
+                    dpm.setUninstallBlocked(admin, dnsPackage, true)
+                   // dpm.setUninstallBlocked(admin, myPackage, true)
+
+                   Log.i("RandomPasswordScreenV2", "setUninstallBlocked: "+myPackage)
+                    
+                    // 4. Block Clear Data (User Control Disabled)
+                    // Get current list so we don't remove existing ones (optional but safer)
+                    val currentProtected = dpm.getUserControlDisabledPackages(admin).toMutableSet()
+                    currentProtected.add(dnsPackage)
+                    currentProtected.add(myPackage)
+                    dpm.setUserControlDisabledPackages(admin, currentProtected.toList())
+
+                    context.popToast("Đã chặn sửa giờ, gỡ/clear data + Cho phép cài App")
+                } catch (e: Exception) {
+                    context.popToast("Failed: ${e.message}")
+                    e.printStackTrace()
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+        ) {
+            Text("TEST: Chặn sửa giờ + Bảo vệ App")
+        }
     }
 }
 

@@ -303,9 +303,7 @@ class MainActivity : FragmentActivity() {
             Log.e("MainActivity", "onCreate: ", e)
        }
 
-//        // 2. Bật Lock Task / Kiosk Mode
-//        dpm.setLockTaskPackages(adminComponent, arrayOf(packageName))
-//        startLockTask()
+
 
 
         val context = applicationContext

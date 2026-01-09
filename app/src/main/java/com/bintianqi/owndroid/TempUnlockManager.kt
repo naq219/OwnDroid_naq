@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Build
 import android.os.UserManager
 import android.util.Log
+import android.content.pm.ApplicationInfo
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.OutOfQuotaPolicy
@@ -127,6 +128,28 @@ object TempUnlockManager {
     fun moveToSoftlock(packageName: String) {
         removeFromHardlock(packageName)
         addToSoftlock(packageName)
+    }
+
+    // ============= APP QUERY HELPERS =============
+
+    /**
+     * Get all user installed apps (excluding system apps and self)
+     */
+    fun getAllUserInstalledApps(context: Context): List<String> {
+        val pm = context.packageManager
+        val myPackage = context.packageName
+        
+        return pm.getInstalledApplications(android.content.pm.PackageManager.GET_META_DATA)
+            .filter { appInfo ->
+                // Filter out system apps unless they are updated system apps
+                val isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+                val isUpdatedSystem = (appInfo.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
+                
+                // Keep if it's NOT a system app OR if it IS an updated system app
+                // Also exclude our own app
+                (!isSystem || isUpdatedSystem) && appInfo.packageName != myPackage
+            }
+            .map { it.packageName }
     }
     
     // ============= LOCK/UNLOCK OPERATIONS =============
@@ -266,20 +289,39 @@ object TempUnlockManager {
         var unlockedCount = 0
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                // 1. Unlock all SOFTLOCK apps only
-                val softlockApps = getSoftlockApps()
-                Log.d(TAG, "Unlock ($durationMinutes min): softlockApps = $softlockApps")
-                Log.d(TAG, "Unlock: unlocking ${softlockApps.size} softlock apps")
-                for (pkg in softlockApps) {
-                    unsuspendApp(pkg)
+                // Determine which apps to process
+                val hardlockApps = getHardlockApps()
+                // In ANY mode (Day or Night), unlocking means "Access to everything except Hardlock"
+                // This covers the edge case where Night Mode blocked apps, and we unlock in Day Mode
+                
+                Log.d(TAG, "Unlock: Unlocking ALL user apps except Hardlock")
+                val allUserApps = getAllUserInstalledApps(context)
+                
+                val appsToUnlock = allUserApps.filter { !hardlockApps.contains(it) }
+                
+                // Batch unsuspend
+                if (appsToUnlock.isNotEmpty()) {
+                    val result = Privilege.DPM.setPackagesSuspended(Privilege.DAR, appsToUnlock.toTypedArray(), false)
+                    if (result.isNotEmpty()) {
+                        Log.w(TAG, "Failed to unsuspend some apps: ${result.contentToString()}")
+                    }
+                }
+                
+                // Unhide individually
+                for (pkg in appsToUnlock) {
                     unhideApp(pkg)
                     unlockedCount++
                 }
                 
+                // Enforce Hardlock safety
+                if (hardlockApps.isNotEmpty()) {
+                    Privilege.DPM.setPackagesSuspended(Privilege.DAR, hardlockApps.toTypedArray(), true)
+                }
+
                 // 2. Clear install apps restriction
                 Privilege.DPM.clearUserRestriction(Privilege.DAR, UserManager.DISALLOW_INSTALL_APPS)
                 
-                // 3. Clear always-on VPN
+                // 3. Clear always-on VPN (User requested: Unlock = No VPN)
                 Privilege.DPM.setAlwaysOnVpnPackage(Privilege.DAR, null, false)
                 
                 // 4. Clear VPN config restriction  
@@ -312,46 +354,113 @@ object TempUnlockManager {
         Log.d(TAG, "========== deactivateTempUnlock START ==========")
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                // 1. Re-lock all SOFTLOCK apps
-                Log.d(TAG, "Step 1: Locking all softlock apps...")
-                lockAllSoftlockApps()
-                Log.d(TAG, "Step 1: DONE")
-                
+                val hardlockApps = getHardlockApps()
+                val isNight = isNightMode()
                 val vpnPackage = AppConfig.VPN_PACKAGE
                 
+                if (isNight) {
+                    // NIGHT MODE LOCK: Block ALL user apps except Whitelist
+                    Log.d(TAG, "Mode: NIGHT. Blocking ALL user apps except Whitelist.")
+                    
+                    val allUserApps = getAllUserInstalledApps(context)
+                    val whitelist = AppConfig.getNightModeWhitelist()
+                    
+                    val appsToSuspend = ArrayList<String>()
+                    val appsToUnsuspend = ArrayList<String>()
+                    
+                    for (pkg in allUserApps) {
+                        if (hardlockApps.contains(pkg)) {
+                            // Rule 1: Hardlock is always blocked
+                            appsToSuspend.add(pkg)
+                        } else if (whitelist.contains(pkg)) {
+                            // Rule 2: Whitelist (and not hardlock) is allowed
+                            appsToUnsuspend.add(pkg)
+                        } else {
+                            // Rule 3: Everything else is blocked in Night Mode
+                            appsToSuspend.add(pkg)
+                        }
+                    }
+                    
+                    // Apply Suspend
+                    if (appsToSuspend.isNotEmpty()) {
+                        Log.d(TAG, "Suspending ${appsToSuspend.size} apps (Hard + Non-Whitelist)")
+                        Privilege.DPM.setPackagesSuspended(Privilege.DAR, appsToSuspend.toTypedArray(), true)
+                    }
+                    
+                    // Apply Unsuspend (for whitelist apps that might have been suspended)
+                    if (appsToUnsuspend.isNotEmpty()) {
+                        Log.d(TAG, "Unsuspending ${appsToUnsuspend.size} whitelist apps")
+                        Privilege.DPM.setPackagesSuspended(Privilege.DAR, appsToUnsuspend.toTypedArray(), false)
+                    }
+                    
+                    // Night Mode VPN Setup: Lockdown DISABLED as requested
+                    Log.d(TAG, "Setting Night Mode VPN (Lockdown=FALSE)...")
+                    val allowlist: MutableSet<String?> = HashSet(whitelist)
+                    // Ensure vpn package itself isn't blocked by VPN config logic (though it's the provider)
+                    allowlist.add(vpnPackage) 
+                    Privilege.DPM.setAlwaysOnVpnPackage(Privilege.DAR, vpnPackage, false, allowlist)
+                    
+                } else {
+                    // DAY MODE LOCK: Block Softlock + Hardlock, Unblock others
+                    Log.d(TAG, "Mode: DAY. Blocking Softlock + Hardlock. Unblocking others.")
+                    
+                    val allUserApps = getAllUserInstalledApps(context)
+                    val softlockApps = getSoftlockApps()
+                    
+                    val appsToSuspend = ArrayList<String>()
+                    val appsToUnsuspend = ArrayList<String>()
+                    
+                    for (pkg in allUserApps) {
+                        if (hardlockApps.contains(pkg)) {
+                            appsToSuspend.add(pkg)
+                        } else if (softlockApps.contains(pkg)) {
+                            appsToSuspend.add(pkg)
+                        } else {
+                            // Normal apps should be open in Day Mode
+                            // Important to UNSUSPEND them in case they were blocked by Night Mode
+                            appsToUnsuspend.add(pkg)
+                        }
+                    }
+                    
+                    if (appsToSuspend.isNotEmpty()) {
+                        Log.d(TAG, "Suspending ${appsToSuspend.size} apps (Soft + Hard)")
+                        Privilege.DPM.setPackagesSuspended(Privilege.DAR, appsToSuspend.toTypedArray(), true)
+                    }
+                    
+                    if (appsToUnsuspend.isNotEmpty()) {
+                         Log.d(TAG, "Unsuspending ${appsToUnsuspend.size} normal apps")
+                        Privilege.DPM.setPackagesSuspended(Privilege.DAR, appsToUnsuspend.toTypedArray(), false)
+                    }
+                    
+                    // Day Mode VPN Setup: Standard Allowlist, Lockdown TRUE
+                    Log.d(TAG, "Setting Day Mode VPN (Lockdown=TRUE)...")
+                    val allowlist: MutableSet<String?> = HashSet(AppConfig.VPN_ALLOWLIST)
+                    Privilege.DPM.setAlwaysOnVpnPackage(Privilege.DAR, vpnPackage, true, allowlist)
+                }
+
+                // COMMON ACTIONS FOR BOTH MODES
+                
                 // 2. Re-add install apps restriction
-                Log.d(TAG, "Step 2: Adding DISALLOW_INSTALL_APPS restriction...")
+                Log.d(TAG, "Adding DISALLOW_INSTALL_APPS restriction...")
                 Privilege.DPM.addUserRestriction(Privilege.DAR, UserManager.DISALLOW_INSTALL_APPS)
-                Log.d(TAG, "Step 2: DONE")
                 
-                // 3. Re-set always-on VPN
-                Log.d(TAG, "Step 3: Setting VPN to $vpnPackage...")
-                val allowlist: MutableSet<String?> = HashSet(AppConfig.VPN_ALLOWLIST)
-                Privilege.DPM.setAlwaysOnVpnPackage(Privilege.DAR, vpnPackage, true, allowlist)
-                Log.d(TAG, "Step 3: VPN SET DONE")
-                
-                // 4. Re-add VPN config restriction
-                Log.d(TAG, "Step 4: Adding DISALLOW_CONFIG_VPN...")
+                // 3. Re-add VPN config restriction
                 Privilege.DPM.addUserRestriction(Privilege.DAR, UserManager.DISALLOW_CONFIG_VPN)
-                Log.d(TAG, "Step 4: DONE")
                 
-                // 5. Re-add private DNS config restriction
-                Log.d(TAG, "Step 5: Adding DISALLOW_CONFIG_PRIVATE_DNS...")
+                // 4. Re-add private DNS config restriction
                 Privilege.DPM.addUserRestriction(Privilege.DAR, UserManager.DISALLOW_CONFIG_PRIVATE_DNS)
-                Log.d(TAG, "Step 5: DONE")
                 
+                // 5. Block date/time config to prevent bypassing night mode
+                Privilege.DPM.addUserRestriction(Privilege.DAR, UserManager.DISALLOW_CONFIG_DATE_TIME)
+
                 // 6. Block uninstall for VPN app
-                Log.d(TAG, "Step 6: Block uninstall for $vpnPackage...")
                 Privilege.DPM.setUninstallBlocked(Privilege.DAR, vpnPackage, true)
-                Log.d(TAG, "Step 6: DONE")
                 
                 // 7. Disable user control for VPN app
-                Log.d(TAG, "Step 7: Disable user control...")
                 val current = Privilege.DPM.getUserControlDisabledPackages(Privilege.DAR)
                 if (!current.contains(vpnPackage)) {
                     Privilege.DPM.setUserControlDisabledPackages(Privilege.DAR, current.plus(vpnPackage))
                 }
-                Log.d(TAG, "Step 7: DONE")
             }
             
             // Clear unlock state
