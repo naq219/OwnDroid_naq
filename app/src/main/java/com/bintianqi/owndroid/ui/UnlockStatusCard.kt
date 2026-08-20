@@ -32,14 +32,18 @@ fun UnlockStatusCard(
     remainingTimeMillis: Long,
     isBlocked: Boolean,
     blockRemainingMillis: Long,
+    isStrictLock: Boolean = false,
+    strictRemainingDays: Int = 0,
+    strictTodayUsed: Int = 0,
     onUnlock: (AppConfig.UnlockTier) -> Unit,
     onLockNow: (Long) -> Unit  // blockMinutes
 ) {
-    val isNightMode = TempUnlockManager.isNightMode()
+    // Strict lock behaves like night mode for card coloring
+    val isNightMode = isStrictLock || TempUnlockManager.isNightMode()
     val bestTier = AppConfig.getBestTier(successfulAttempts, isNightMode)
     val nextTier = AppConfig.getNextTier(successfulAttempts, isNightMode)
     val firstTier = AppConfig.getFirstTier(isNightMode)
-    
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
@@ -52,8 +56,13 @@ fun UnlockStatusCard(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             when {
-                isUnlockActive -> UnlockedState(remainingTimeMillis, bestTier, onLockNow)
+                isUnlockActive -> {
+                    // During strict lock the current tier is always the strict tier
+                    val currentTier = if (isStrictLock) AppConfig.STRICT_LOCK_TIER else bestTier
+                    UnlockedState(remainingTimeMillis, currentTier, onLockNow)
+                }
                 isBlocked -> BlockedState(blockRemainingMillis)
+                isStrictLock -> StrictLockState(strictRemainingDays, strictTodayUsed, onUnlock)
                 isNightMode -> NightModeState(successfulAttempts, bestTier, nextTier, firstTier, onUnlock)
                 else -> DayModeState(successfulAttempts, bestTier, nextTier, firstTier, onUnlock)
             }
@@ -153,6 +162,66 @@ private fun BlockedState(remainingMillis: Long) {
         fontSize = 11.sp,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
+}
+
+@Composable
+private fun StrictLockState(
+    remainingDays: Int,
+    todayUsed: Int,
+    onUnlock: (AppConfig.UnlockTier) -> Unit
+) {
+    val remainingUses = AppConfig.STRICT_LOCK_DAILY_UNLOCKS - todayUsed
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("🔒", fontSize = 20.sp)
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = "KHOÁ CHẶT CHẼ",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF6A1B9A)
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = "Còn $remainingDays ngày",
+            fontSize = 12.sp,
+            color = Color(0xFF6A1B9A)
+        )
+    }
+
+    Spacer(Modifier.height(8.dp))
+
+    if (remainingUses > 0) {
+        Button(
+            onClick = { onUnlock(AppConfig.STRICT_LOCK_TIER) },
+            modifier = Modifier.fillMaxWidth().height(40.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6A1B9A)),
+            shape = RoundedCornerShape(8.dp),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+        ) {
+            Icon(painterResource(R.drawable.lock_open_fill0), null, Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(
+                "${AppConfig.STRICT_LOCK_TIER.label} (còn $remainingUses/${AppConfig.STRICT_LOCK_DAILY_UNLOCKS} lượt hôm nay)",
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp
+            )
+        }
+    } else {
+        Text(
+            text = "Đã dùng hết ${AppConfig.STRICT_LOCK_DAILY_UNLOCKS} lượt mở khoá hôm nay",
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFFB71C1C),
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = "Chờ qua 00:00 để có lượt mới",
+            fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
 }
 
 @Composable

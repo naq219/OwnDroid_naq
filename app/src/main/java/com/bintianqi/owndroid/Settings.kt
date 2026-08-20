@@ -25,12 +25,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.OutlinedTextField
@@ -128,6 +130,38 @@ fun SettingsScreen(onNavigateUp: () -> Unit, onNavigate: (Any) -> Unit) {
                 .verticalScroll(rememberScrollState())
                 .padding(bottom = 80.dp)
         ) {
+            // Strict lock (khoá chặt chẽ) stop option - only visible while a strict lock is active
+            var strictLockActive by remember { mutableStateOf(TempUnlockManager.isStrictLockActive()) }
+            if (strictLockActive) {
+                var showStopStrictLockDialog by remember { mutableStateOf(false) }
+                FunctionItem(
+                    title = R.string.stop_strict_lock,
+                    desc = "Còn ${TempUnlockManager.getStrictRemainingDays()} ngày",
+                    icon = R.drawable.lock_open_fill0
+                ) { showStopStrictLockDialog = true }
+                if (showStopStrictLockDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showStopStrictLockDialog = false },
+                        title = { Text("Dừng khoá chặt chẽ?") },
+                        text = { Text("Máy sẽ trở về chế độ ngày/đêm bình thường ngay bây giờ.") },
+                        confirmButton = {
+                            TextButton({
+                                showStopStrictLockDialog = false
+                                try {
+                                    TempUnlockManager.deactivateStrictLock(context)
+                                    strictLockActive = false
+                                    context.popToast("Đã dừng khoá chặt chẽ")
+                                } catch (e: Exception) {
+                                    context.popToast("Lỗi: ${e.message}")
+                                }
+                            }) { Text("Dừng khoá") }
+                        },
+                        dismissButton = {
+                            TextButton({ showStopStrictLockDialog = false }) { Text("Huỷ") }
+                        }
+                    )
+                }
+            }
             FunctionItem(title = R.string.options, icon = R.drawable.tune_fill0) { onNavigate(SettingsOptions) }
             FunctionItem(title = R.string.appearance, icon = R.drawable.format_paint_fill0) { onNavigate(Appearance) }
             FunctionItem(R.string.app_lock, icon = R.drawable.lock_fill0) { onNavigate(AppLockSettings) }

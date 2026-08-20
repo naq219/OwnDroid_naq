@@ -61,6 +61,12 @@ fun RandomPasswordScreenV2(onSucceed: () -> Unit) {
     val initialBlocked = TempUnlockManager.isBlocked()
     var isBlocked by remember { mutableStateOf(initialBlocked) }
     var remainingBlockMillis by remember { mutableLongStateOf(TempUnlockManager.getRemainingBlockTimeMillis()) }
+
+    // Strict lock (khoá chặt chẽ) state
+    var isStrictLock by remember { mutableStateOf(TempUnlockManager.isStrictLockActive()) }
+    var strictRemainingDays by remember { mutableIntStateOf(TempUnlockManager.getStrictRemainingDays()) }
+    var strictTodayUsed by remember { mutableIntStateOf(TempUnlockManager.getStrictTodayUsed()) }
+    var showStrictLockDialog by remember { mutableStateOf(false) }
     
     // IMPORTANT: If blocked on init, reset attempts to 0
     // This prevents unlock immediately after block period was set by RelockWorker
@@ -142,6 +148,18 @@ fun RandomPasswordScreenV2(onSucceed: () -> Unit) {
         onDispose { }
     }
 
+    // Auto-lift strict lock if it already expired (e.g. StrictLockWorker couldn't run on time)
+    LaunchedEffect(Unit) {
+        if (SP.strictLockDays > 0 && !TempUnlockManager.isStrictLockActive()) {
+            try {
+                TempUnlockManager.deactivateStrictLock(context)
+                context.popToast("Khoá chặt chẽ đã hết hạn")
+            } catch (e: Exception) {
+                Log.e("RandomPasswordScreenV2", "Failed to lift expired strict lock", e)
+            }
+        }
+    }
+
     // First run bypass + Default config
     LaunchedEffect(Unit) {
         if (SP.lastAuthTime == 0L) {
@@ -220,10 +238,19 @@ fun RandomPasswordScreenV2(onSucceed: () -> Unit) {
             remainingTimeMillis = remainingUnlockMillis,
             isBlocked = isBlocked,
             blockRemainingMillis = remainingBlockMillis,
+            isStrictLock = isStrictLock,
+            strictRemainingDays = strictRemainingDays,
+            strictTodayUsed = strictTodayUsed,
             onUnlock = { tier ->
+                // During strict lock, check the daily quota before unlocking
+                if (isStrictLock && TempUnlockManager.getStrictTodayUsed() >= AppConfig.STRICT_LOCK_DAILY_UNLOCKS) {
+                    context.popToast("Đã dùng hết ${AppConfig.STRICT_LOCK_DAILY_UNLOCKS} lượt mở khoá hôm nay!")
+                    return@UnlockStatusCard
+                }
                 TempUnlockManager.activateWithTier(context, tier)
                 isUnlockActive = true
                 remainingUnlockMillis = TempUnlockManager.getRemainingTimeMillis()
+                strictTodayUsed = TempUnlockManager.getStrictTodayUsed()
                 successfulAttempts = 0
                 generateNewChallenge()
                 context.popToast("Đã mở khóa ${tier.label}!")
@@ -245,8 +272,51 @@ fun RandomPasswordScreenV2(onSucceed: () -> Unit) {
             }
         )
         
+        Spacer(Modifier.height(16.dp))
+
+        // ========== STRICT LOCK (KHOÁ CHẶT CHẼ) ==========
+        if (!isStrictLock) {
+            Button(
+                onClick = { showStrictLockDialog = true },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6A1B9A))
+            ) {
+                Text("KHOÁ CHẶT CHẼ", fontWeight = FontWeight.Bold)
+            }
+        } else {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF6A1B9A).copy(alpha = 0.15f))
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "🔒 ĐANG KHOÁ CHẶT CHẼ",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF6A1B9A)
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "Còn $strictRemainingDays ngày",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Nhập đủ $TOTAL_ATTEMPTS lần để vào Settings và dừng",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
         Spacer(Modifier.height(24.dp))
-        
+
         // ========== PASSWORD INPUT SECTION ==========
         if (!isBlocked) {
             PasswordInputSection(
@@ -337,6 +407,75 @@ fun RandomPasswordScreenV2(onSucceed: () -> Unit) {
             Text("TEST: Chặn sửa giờ + Bảo vệ App")
         }
     }
+
+    // ========== STRICT LOCK DIALOG ==========
+    if (showStrictLockDialog) {
+        StrictLockDaysDialog(
+            onConfirm = { days ->
+                showStrictLockDialog = false
+                try {
+                    TempUnlockManager.activateStrictLock(context, days)
+                    isStrictLock = true
+                    strictRemainingDays = days
+                    strictTodayUsed = 0
+                    // Refresh UI state to reflect the immediate night-rest lock
+                    isUnlockActive = false
+                    remainingUnlockMillis = 0L
+                    context.popToast("Đã khoá chặt chẽ $days ngày!")
+                } catch (e: Exception) {
+                    context.popToast("Lỗi: ${e.message}")
+                }
+            },
+            onDismiss = { showStrictLockDialog = false }
+        )
+    }
+}
+
+/**
+ * Dialog to input the number of days for strict lock (1 - 90).
+ */
+@Composable
+private fun StrictLockDaysDialog(onConfirm: (Int) -> Unit, onDismiss: () -> Unit) {
+    var daysText by remember { mutableStateOf("") }
+    val days = daysText.toIntOrNull()
+    val isValid = days != null && days in 1..90
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Khoá chặt chẽ", fontWeight = FontWeight.Bold) },
+        text = {
+            Column {
+                Text(
+                    text = "Máy sẽ luôn ở chế độ nghỉ ban đêm trong số ngày này. Chỉ một số app được phép dùng.",
+                    fontSize = 13.sp
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = daysText,
+                    onValueChange = { daysText = it.filter(Char::isDigit).take(2) },
+                    label = { Text("Số ngày khoá (1 - 90)") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Number,
+                        imeAction = ImeAction.Done
+                    ),
+                    keyboardActions = KeyboardActions(onDone = { if (days != null) onConfirm(days) }),
+                    isError = daysText.isNotEmpty() && !isValid,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { if (days != null) onConfirm(days) }, enabled = isValid) {
+                Text("Khoá", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Huỷ")
+            }
+        }
+    )
 }
 
 /**

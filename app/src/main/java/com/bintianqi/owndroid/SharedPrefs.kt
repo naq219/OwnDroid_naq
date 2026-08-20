@@ -44,9 +44,17 @@ class SharedPrefs(context: Context) {
     
     // Block time - user cannot enter password until this timestamp
     var blockEndTime by LongSharedPref("unlock.block_end_time", 0L)
-    
+
     // Last block duration used (for relock worker)
     var lastUsedBlockMinutes by LongSharedPref("unlock.last_block_minutes", 0L)
+
+    // Strict lock (khoá chặt chẽ) - forced night-rest mode for N days
+    var strictLockEndTime by LongSharedPref("lock.strict_end_time", 0L)
+    var strictLockDays by IntSharedPref("lock.strict_days", 0)
+    // Number of 10-minute unlocks used today during strict lock
+    var strictLockUsedToday by IntSharedPref("lock.strict_used_today", 0)
+    // Date (yyyy-MM-dd) of the last day the daily counter was used, for lazy reset
+    var strictLockLastUsedDate by StringSharedPref("lock.strict_last_used_date")
 }
 
 private class BooleanSharedPref(val key: String, val defValue: Boolean = false): ReadWriteProperty<SharedPrefs, Boolean> {

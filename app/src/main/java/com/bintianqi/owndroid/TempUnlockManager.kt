@@ -25,6 +25,7 @@ object TempUnlockManager {
     private val TEMP_UNLOCK_DURATION_MINUTES = AppConfig.TEMP_UNLOCK_DURATION_MINUTES
     private val DAY_UNLOCK_DURATION_MINUTES = AppConfig.DAY_UNLOCK_DURATION_MINUTES
     private const val WORK_NAME = "temp_unlock_relock"
+    private const val STRICT_LOCK_WORK_NAME = "strict_lock_end"
     
     // Night mode hours from config
     private val NIGHT_START_HOUR = AppConfig.NIGHT_MODE_START_HOUR
@@ -355,7 +356,8 @@ object TempUnlockManager {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 val hardlockApps = getHardlockApps()
-                val isNight = isNightMode()
+                // Strict lock forces night-rest behavior 24/7 for its whole duration
+                val isNight = isNightMode() || isStrictLockActive()
                 val vpnPackage = AppConfig.VPN_PACKAGE
                 
                 if (isNight) {
@@ -547,12 +549,116 @@ object TempUnlockManager {
         SP.blockEndTime = 0L
     }
     
+    // ============= STRICT LOCK (KHOÁ CHẶT CHẼ) =============
+
+    /**
+     * Check if strict lock (forced night-rest mode) is currently active.
+     */
+    fun isStrictLockActive(): Boolean {
+        val endTime = SP.strictLockEndTime
+        return endTime > 0 && System.currentTimeMillis() < endTime
+    }
+
+    /**
+     * Get remaining strict lock days (ceil), 0 if not active.
+     */
+    fun getStrictRemainingDays(): Int {
+        if (!isStrictLockActive()) return 0
+        val remainingMillis = SP.strictLockEndTime - System.currentTimeMillis()
+        return ((remainingMillis + TimeUnit.DAYS.toMillis(1) - 1) / TimeUnit.DAYS.toMillis(1)).toInt()
+    }
+
+    /**
+     * Get number of 10-minute unlocks already used today (lazy reset per day).
+     */
+    fun getStrictTodayUsed(): Int {
+        val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
+        if (SP.strictLockLastUsedDate != today) {
+            SP.strictLockLastUsedDate = today
+            SP.strictLockUsedToday = 0
+        }
+        return SP.strictLockUsedToday
+    }
+
+    /**
+     * Increment today's used counter.
+     */
+    fun incrementStrictTodayUsed() {
+        getStrictTodayUsed() // ensure counter is for today
+        SP.strictLockUsedToday = SP.strictLockUsedToday + 1
+    }
+
+    /**
+     * Activate strict lock for the given number of days.
+     * Forces night-rest mode 24/7: only whitelist apps remain usable.
+     */
+    fun activateStrictLock(context: Context, days: Int) {
+        Log.d(TAG, "========== activateStrictLock($days days) ==========")
+        try {
+            // 1. Save state first so deactivateTempUnlock takes the night branch
+            SP.strictLockEndTime = System.currentTimeMillis() + TimeUnit.DAYS.toMillis(days.toLong())
+            SP.strictLockDays = days
+            SP.strictLockUsedToday = 0
+            SP.strictLockLastUsedDate = null
+
+            // 2. Cancel any pending relock, drop current unlock/block state
+            cancelRelock(context)
+            clearBlockPeriod()
+
+            // 3. Apply night-rest lock immediately (strict lock is already flagged)
+            deactivateTempUnlock(context)
+
+            // 4. Schedule automatic lift after N days
+            val request = OneTimeWorkRequestBuilder<StrictLockWorker>()
+                .setInitialDelay(days.toLong(), TimeUnit.DAYS)
+                .build()
+            WorkManager.getInstance(context)
+                .enqueueUniqueWork(STRICT_LOCK_WORK_NAME, ExistingWorkPolicy.REPLACE, request)
+
+            Log.d(TAG, "Strict lock activated for $days days")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error activating strict lock", e)
+            throw e
+        }
+    }
+
+    /**
+     * Deactivate strict lock (early cancel or auto-expiry).
+     * Restores normal day/night behavior.
+     */
+    fun deactivateStrictLock(context: Context) {
+        Log.d(TAG, "========== deactivateStrictLock ==========")
+        try {
+            SP.strictLockEndTime = 0L
+            SP.strictLockDays = 0
+            SP.strictLockUsedToday = 0
+            SP.strictLockLastUsedDate = null
+            WorkManager.getInstance(context).cancelUniqueWork(STRICT_LOCK_WORK_NAME)
+            // Re-apply the correct lock state for the current real day/night mode
+            deactivateTempUnlock(context)
+            Log.d(TAG, "Strict lock deactivated")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error deactivating strict lock", e)
+            throw e
+        }
+    }
+
     // ============= TIER-BASED UNLOCK =============
-    
+
     /**
      * Activate unlock with specified tier
      */
     fun activateWithTier(context: Context, tier: AppConfig.UnlockTier): Int {
+        // During strict lock, only the strict tier is allowed and the daily quota applies
+        if (isStrictLockActive()) {
+            if (tier.unlockMinutes != AppConfig.STRICT_LOCK_TIER.unlockMinutes ||
+                getStrictTodayUsed() >= AppConfig.STRICT_LOCK_DAILY_UNLOCKS) {
+                Log.w(TAG, "activateWithTier blocked by strict lock (tier=${tier.label})")
+                return 0
+            }
+            incrementStrictTodayUsed()
+        }
+
         // Clear any block period
         clearBlockPeriod()
         

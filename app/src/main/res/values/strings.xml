@@ -598,6 +598,7 @@
 
     <string name="shortcuts">Shortcuts</string>
     <string name="app_lock">App lock</string>
+    <string name="stop_strict_lock">Dừng khoá chặt chẽ</string>
     <string name="minimum_length_4">The length must not be less than 4</string>
     <string name="leave_empty_to_remain_unchanged">Leave empty to remain unchanged</string>
     <string name="allow_biometrics">Allow biometrics</string>

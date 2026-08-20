@@ -37,7 +37,15 @@ object AppConfig {
         UnlockTier(1,  5,  15, "5 PHÚT"),
         UnlockTier(25, -1, 0,  "BỎ QUA ĐÊM NAY")
     )
-    
+
+    // ============= STRICT LOCK (KHOÁ CHẶT CHẼ) =============
+
+    // Only tier available during strict lock
+    val STRICT_LOCK_TIER = UnlockTier(1, 10, 15, "10 PHÚT")
+
+    // Max number of 10-minute unlocks allowed per day during strict lock
+    const val STRICT_LOCK_DAILY_UNLOCKS = 3
+
     // ============= NIGHT MODE =============
     
     const val NIGHT_MODE_START_HOUR = 22
@@ -49,7 +57,7 @@ object AppConfig {
     
     val VPN_ALLOWLIST: Set<String?> = setOf(
         "com.facebook.adsmanager",
-        "com.facebook.orca",
+       
         "com.facebook.pages.app"
     )
 
@@ -60,15 +68,27 @@ object AppConfig {
         // Start with VPN whitelist
         val whitelist = VPN_ALLOWLIST.filterNotNull().toMutableSet()
         // Add additional critical apps if needed
-        whitelist.add("com.android.vending") // Google Play Store
+         whitelist.add("com.android.vending") // Google Play Store
          whitelist.add("com.vng.inputmethod.labankey")
-          whitelist.add("naq.dns")
-           whitelist.add("vn.com.techcombank.bb.app")
-            whitelist.add("com.vnid")
-    whitelist.add("vn.com.vetc.app")
-              whitelist.add("com.vnid")
-                whitelist.add("com.vnpay.vpbankonline")
+         whitelist.add("naq.dns")
+         whitelist.add("vn.com.techcombank.bb.app")
+         whitelist.add("com.vnid")
+         whitelist.add("vn.com.vetc.app")
+         whitelist.add("com.vnid")
+         whitelist.add("com.vnpay.vpbankonline")
          whitelist.add("com.twofasapp")       
+         whitelist.add("com.google.android.apps.maps") 
+         whitelist.add("nhacnho.ghichu.reminder2") 
+         whitelist.add("com.zing.zalo") // Zalo 
+          whitelist.add("com.lux.luxcloud") // Zalo 
+
+ whitelist.add("naq.a1") // Zalo 
+
+ whitelist.add("naq.a2") // Zalo 
+
+ whitelist.add("naq.a3") // Zalo 
+
+ whitelist.add("com.automattic.simplenote") // Zalo 
 
 
         return whitelist
