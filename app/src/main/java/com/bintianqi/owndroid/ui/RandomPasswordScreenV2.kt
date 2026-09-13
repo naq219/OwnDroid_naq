@@ -39,7 +39,7 @@ import kotlin.random.Random
 @Serializable
 object RandomPasswordScreenV2
 
-private const val TOTAL_ATTEMPTS = 50 // For settings access
+private const val TOTAL_ATTEMPTS = 3 // For settings access
 
 @Composable
 fun RandomPasswordScreenV2(onSucceed: () -> Unit) {

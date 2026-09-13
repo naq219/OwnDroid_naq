@@ -371,7 +371,7 @@ fun Home(vm: MyViewModel, onLock: () -> Unit) {
         composable<Home> { HomeScreen(::navigate) }
         composable<Login> {
             RandomPasswordScreenV2 {
-                navController.navigate(Home) {
+                navController.navigate(Settings) {
                     popUpTo<Login> { inclusive = true }
                 }
             }

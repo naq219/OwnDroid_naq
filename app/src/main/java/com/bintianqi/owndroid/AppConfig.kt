@@ -44,7 +44,7 @@ object AppConfig {
     val STRICT_LOCK_TIER = UnlockTier(1, 10, 15, "10 PHÚT")
 
     // Max number of 10-minute unlocks allowed per day during strict lock
-    const val STRICT_LOCK_DAILY_UNLOCKS = 3
+    const val STRICT_LOCK_DAILY_UNLOCKS = 30
 
     // ============= NIGHT MODE =============
     
@@ -81,6 +81,10 @@ object AppConfig {
          whitelist.add("nhacnho.ghichu.reminder2") 
          whitelist.add("com.zing.zalo") // Zalo 
           whitelist.add("com.lux.luxcloud") // Zalo 
+           whitelist.add("com.pqsoft.phapquang") // Zalo 
+            whitelist.add("app.revanced.android.youtube") // Zalo 
+            
+            whitelist.add("com.google.android.apps.bard")
 
  whitelist.add("naq.a1") // Zalo 
 
@@ -116,7 +120,7 @@ object AppConfig {
     
     // ============= SETTINGS =============
     
-    const val ATTEMPTS_FOR_SETTINGS = 50
+    const val ATTEMPTS_FOR_SETTINGS = 1
     
     // Legacy constants for backward compatibility
     const val ATTEMPTS_FOR_TEMP_UNLOCK = 6

@@ -4,6 +4,10 @@
 
 使用安卓的设备策略管理器API管理你的设备。
 
+$env:JAVA_HOME = "E:\PROGRAM\AndroidStudio\jbr"; $env:PATH = "$env:JAVA_HOME\bin;$env:PATH"; .\gradlew.bat :app:assembleRelease
+
+
+
 ## 下载
 
 - [IzzyOnDroid F-Droid Repository](https://apt.izzysoft.de/fdroid/index/apk/com.bintianqi.owndroid)
