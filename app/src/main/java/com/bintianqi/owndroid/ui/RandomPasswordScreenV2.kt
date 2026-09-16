@@ -39,7 +39,7 @@ import kotlin.random.Random
 @Serializable
 object RandomPasswordScreenV2
 
-private const val TOTAL_ATTEMPTS = 3 // For settings access
+private const val TOTAL_ATTEMPTS = 20 // For settings access
 
 @Composable
 fun RandomPasswordScreenV2(onSucceed: () -> Unit) {
@@ -511,6 +511,7 @@ private fun PasswordInputSection(
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 2.sp,
+                color = Color.White, // <-- Thêm dòng này
                 modifier = Modifier.padding(bottom = 16.dp)
             )
             

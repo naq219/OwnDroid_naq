@@ -92,6 +92,15 @@ object AppConfig {
 
  whitelist.add("naq.a3") // Zalo 
 
+ whitelist.add("co.median.android.zpdprql") // Zalo 
+  whitelist.add("co.median.android.zpdprql") 
+ whitelist.add("in.snapcore.screen_alive")
+ whitelist.add("com.android.chrome") 
+ whitelist.add("com.openai.chatgpt")
+  whitelist.add("org.videolan.vlc")
+
+
+
  whitelist.add("com.automattic.simplenote") // Zalo 
 
 
@@ -124,8 +133,8 @@ object AppConfig {
     
     // Legacy constants for backward compatibility
     const val ATTEMPTS_FOR_TEMP_UNLOCK = 6
-    const val ATTEMPTS_FOR_DAY_UNLOCK = 25
-    const val TEMP_UNLOCK_DURATION_MINUTES = 10L
+    const val ATTEMPTS_FOR_DAY_UNLOCK = 5
+    const val TEMP_UNLOCK_DURATION_MINUTES = 5L
     const val DAY_UNLOCK_DURATION_MINUTES = 1440L
     
     // ============= HELPERS =============
