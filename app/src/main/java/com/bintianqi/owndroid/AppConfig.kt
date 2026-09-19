@@ -62,11 +62,16 @@ object AppConfig {
     )
 
     /**
-     * Get whitelist of apps allowed during Night Mode
+     * Get whitelist of apps allowed during Night Mode (local + remote extra + remote VPN allowlist)
      */
     fun getNightModeWhitelist(): Set<String> {
         // Start with VPN whitelist
         val whitelist = VPN_ALLOWLIST.filterNotNull().toMutableSet()
+        try {
+            whitelist.addAll(getNightWhitelistExtra())
+            whitelist.addAll(getRemoteVpnAllowlist())
+            getRemoteVpnPackage().takeIf { it.isNotBlank() }?.let { whitelist.add(it) }
+        } catch (_: Exception) { }
         // Add additional critical apps if needed
          whitelist.add("com.android.vending") // Google Play Store
          whitelist.add("com.vng.inputmethod.labankey")
@@ -140,10 +145,10 @@ object AppConfig {
     // ============= HELPERS =============
     
     /**
-     * Get tiers based on current mode
+     * Get tiers based on current mode (ưu tiên remote, fallback hằng số local)
      */
-    fun getCurrentTiers(isNightMode: Boolean) = 
-        if (isNightMode) NIGHT_TIERS else DAY_TIERS
+    fun getCurrentTiers(isNightMode: Boolean) =
+        if (isNightMode) getNightTiersRemote() else getDayTiersRemote()
     
     /**
      * Find best tier user qualifies for
@@ -166,4 +171,50 @@ object AppConfig {
      */
     fun getFirstTier(isNightMode: Boolean): UnlockTier =
         getCurrentTiers(isNightMode).first()
+
+    // ============= REMOTE CONFIG (cấu hình online, local làm fallback) =============
+
+    private fun remoteOrNull(): OwndroidRemoteConfig? = try {
+        RemoteConfigManager.effective()
+    } catch (_: Exception) { null }
+
+    private fun RemoteTier.toTier(): UnlockTier {
+        val label = when {
+            unlock == -1L -> "BỎ QUA ĐÊM NAY"
+            unlock >= 1440 -> "1 NGÀY"
+            else -> "$unlock PHÚT"
+        }
+        return UnlockTier(req, unlock, block, label)
+    }
+
+    /** Tier strict hiệu lực: remote (mặc định 5p) hoặc hằng số local. */
+    fun getStrictTier(): UnlockTier {
+        val s = remoteOrNull()?.strictLock ?: return STRICT_LOCK_TIER
+        val label = if (s.unlockMinutes >= 1440) "1 NGÀY" else "${s.unlockMinutes} PHÚT"
+        return UnlockTier(1, s.unlockMinutes, s.blockMinutes, label)
+    }
+
+    fun getStrictDailyUnlocks(): Int = remoteOrNull()?.strictLock?.dailyUnlocks ?: STRICT_LOCK_DAILY_UNLOCKS
+
+    fun getDayTiersRemote(): List<UnlockTier> =
+        remoteOrNull()?.dayTiers?.map { it.toTier() }?.ifEmpty { null } ?: DAY_TIERS
+
+    fun getNightTiersRemote(): List<UnlockTier> =
+        remoteOrNull()?.nightTiers?.map { it.toTier() }?.ifEmpty { null } ?: NIGHT_TIERS
+
+    fun getNightStartHour(): Int = remoteOrNull()?.nightMode?.startHour ?: NIGHT_MODE_START_HOUR
+
+    fun getNightEndHour(): Int = remoteOrNull()?.nightMode?.endHour ?: NIGHT_MODE_END_HOUR
+
+    fun getAttemptsForSettings(): Int = remoteOrNull()?.login?.attemptsForSettings ?: 20
+
+    fun getReloginMinutes(): Long = remoteOrNull()?.login?.reloginMinutes ?: 10L
+
+    fun getChallengeLength(): Int = remoteOrNull()?.login?.challengeLength ?: 10
+
+    fun getNightWhitelistExtra(): List<String> = remoteOrNull()?.nightWhitelistExtra ?: emptyList()
+
+    fun getRemoteVpnPackage(): String = remoteOrNull()?.vpn?.`package` ?: VPN_PACKAGE
+
+    fun getRemoteVpnAllowlist(): List<String> = remoteOrNull()?.vpn?.allowlist ?: emptyList()
 }

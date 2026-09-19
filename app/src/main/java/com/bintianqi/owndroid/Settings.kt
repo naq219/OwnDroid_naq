@@ -44,7 +44,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -162,7 +164,47 @@ fun SettingsScreen(onNavigateUp: () -> Unit, onNavigate: (Any) -> Unit) {
                     )
                 }
             }
-            FunctionItem(title = R.string.options, icon = R.drawable.tune_fill0) { onNavigate(SettingsOptions) }
+            // Remote config (chỉ đổi URL sau khi đã login; màn Login chỉ xem + Sync URL cố định)
+            var cfgUrl by remember { mutableStateOf(RemoteConfigManager.baseUrl()) }
+            var cfgMsg by remember { mutableStateOf("") }
+            var syncing by remember { mutableStateOf(false) }
+            val scope = rememberCoroutineScope()
+            FunctionItem(
+                title = R.string.options, icon = R.drawable.tune_fill0
+            ) { onNavigate(SettingsOptions) }
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Text("Cấu hình online", style = androidx.compose.material3.MaterialTheme.typography.titleSmall)
+                OutlinedTextField(
+                    value = cfgUrl, onValueChange = { cfgUrl = it },
+                    label = { Text("URL web cấu hình") },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true
+                )
+                Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            RemoteConfigManager.setBaseUrl(cfgUrl)
+                            cfgUrl = RemoteConfigManager.baseUrl()
+                            context.popToast("Đã lưu URL")
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Lưu URL") }
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                syncing = true
+                                cfgMsg = "Đang sync…"
+                                val r = RemoteConfigManager.sync(context)
+                                syncing = false
+                                cfgMsg = if (r.isSuccess) "Sync thành công." else (r.exceptionOrNull()?.message ?: "Thất bại")
+                                context.popToast(cfgMsg)
+                            }
+                        },
+                        enabled = !syncing,
+                        modifier = Modifier.weight(1f)
+                    ) { Text(if (syncing) "…" else "Sync ngay") }
+                }
+                if (cfgMsg.isNotEmpty()) Text(cfgMsg, style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
+            }
             FunctionItem(title = R.string.appearance, icon = R.drawable.format_paint_fill0) { onNavigate(Appearance) }
             FunctionItem(R.string.app_lock, icon = R.drawable.lock_fill0) { onNavigate(AppLockSettings) }
             if (privilege.device || privilege.profile)

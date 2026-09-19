@@ -2,13 +2,20 @@ package com.bintianqi.owndroid.ui
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -36,7 +43,8 @@ fun UnlockStatusCard(
     strictRemainingDays: Int = 0,
     strictTodayUsed: Int = 0,
     onUnlock: (AppConfig.UnlockTier) -> Unit,
-    onLockNow: (Long) -> Unit  // blockMinutes
+    onLockNow: (Long) -> Unit,  // blockMinutes
+    onExtendBlock: (Long) -> Unit = {}  // extraMinutes: tự nguyện khoá thêm
 ) {
     // Strict lock behaves like night mode for card coloring
     val isNightMode = isStrictLock || TempUnlockManager.isNightMode()
@@ -58,10 +66,10 @@ fun UnlockStatusCard(
             when {
                 isUnlockActive -> {
                     // During strict lock the current tier is always the strict tier
-                    val currentTier = if (isStrictLock) AppConfig.STRICT_LOCK_TIER else bestTier
+                    val currentTier = if (isStrictLock) AppConfig.getStrictTier() else bestTier
                     UnlockedState(remainingTimeMillis, currentTier, onLockNow)
                 }
-                isBlocked -> BlockedState(blockRemainingMillis)
+                isBlocked -> BlockedState(blockRemainingMillis, onExtendBlock)
                 isStrictLock -> StrictLockState(strictRemainingDays, strictTodayUsed, onUnlock)
                 isNightMode -> NightModeState(successfulAttempts, bestTier, nextTier, firstTier, onUnlock)
                 else -> DayModeState(successfulAttempts, bestTier, nextTier, firstTier, onUnlock)
@@ -133,10 +141,14 @@ private fun UnlockedState(
 }
 
 @Composable
-private fun BlockedState(remainingMillis: Long) {
+private fun BlockedState(
+    remainingMillis: Long,
+    onExtendBlock: (Long) -> Unit = {}
+) {
     val minutes = (remainingMillis / 60000).toInt()
     val seconds = ((remainingMillis / 1000) % 60).toInt()
-    
+    var showExtendDialog by remember { mutableStateOf(false) }
+
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text("⏳", fontSize = 24.sp)
         Spacer(Modifier.width(8.dp))
@@ -147,20 +159,110 @@ private fun BlockedState(remainingMillis: Long) {
             color = Color(0xFFB71C1C)
         )
     }
-    
+
     Spacer(Modifier.height(4.dp))
-    
+
     Text(
         text = "Chờ ${minutes}:${seconds.toString().padStart(2, '0')}",
         fontSize = 20.sp,
         fontWeight = FontWeight.Bold,
         color = MaterialTheme.colorScheme.onSurface
     )
-    
+
     Text(
         text = "Không thể nhập mật khẩu",
         fontSize = 11.sp,
         color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+
+    Spacer(Modifier.height(8.dp))
+
+    OutlinedButton(
+        onClick = { showExtendDialog = true },
+        modifier = Modifier.fillMaxWidth().height(40.dp),
+        shape = RoundedCornerShape(8.dp),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+    ) {
+        Icon(painterResource(R.drawable.lock_fill0), null, Modifier.size(16.dp))
+        Spacer(Modifier.width(6.dp))
+        Text("KHOÁ THÊM", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+    }
+
+    if (showExtendDialog) {
+        ExtendBlockDialog(
+            onDismiss = { showExtendDialog = false },
+            onConfirm = { extraMinutes ->
+                showExtendDialog = false
+                onExtendBlock(extraMinutes)
+            }
+        )
+    }
+}
+
+/**
+ * Dialog nhập số + chọn đơn vị (phút/giờ/ngày) để tự nguyện khoá thêm.
+ */
+@Composable
+private fun ExtendBlockDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (Long) -> Unit  // extraMinutes
+) {
+    var numberText by remember { mutableStateOf("") }
+    var unitIndex by remember { mutableIntStateOf(0) }
+    val unitLabels = listOf("Phút", "Giờ", "Ngày")
+    val unitMultipliers = listOf(1L, 60L, 1440L)
+    val number = numberText.toIntOrNull()
+    val totalMinutes = if (number != null && number > 0) number * unitMultipliers[unitIndex] else 0L
+    val isValid = totalMinutes in 1..43200 // tối đa 30 ngày
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Khoá thêm", fontWeight = FontWeight.Bold) },
+        text = {
+            Column {
+                Text(
+                    text = "Cộng thêm thời gian chờ vào block hiện tại.",
+                    fontSize = 13.sp
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = numberText,
+                    onValueChange = { numberText = it.filter(Char::isDigit).take(5) },
+                    label = { Text("Số lượng") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    isError = numberText.isNotEmpty() && !isValid,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    unitLabels.forEachIndexed { i, label ->
+                        FilterChip(
+                            selected = unitIndex == i,
+                            onClick = { unitIndex = i },
+                            label = { Text(label) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(totalMinutes) },
+                enabled = isValid
+            ) {
+                Text("OK", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Huỷ")
+            }
+        }
     )
 }
 
@@ -170,7 +272,8 @@ private fun StrictLockState(
     todayUsed: Int,
     onUnlock: (AppConfig.UnlockTier) -> Unit
 ) {
-    val remainingUses = AppConfig.STRICT_LOCK_DAILY_UNLOCKS - todayUsed
+    val dailyQuota = AppConfig.getStrictDailyUnlocks()
+    val remainingUses = dailyQuota - todayUsed
 
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text("🔒", fontSize = 20.sp)
@@ -192,8 +295,9 @@ private fun StrictLockState(
     Spacer(Modifier.height(8.dp))
 
     if (remainingUses > 0) {
+        val strictTier = AppConfig.getStrictTier()
         Button(
-            onClick = { onUnlock(AppConfig.STRICT_LOCK_TIER) },
+            onClick = { onUnlock(strictTier) },
             modifier = Modifier.fillMaxWidth().height(40.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6A1B9A)),
             shape = RoundedCornerShape(8.dp),
@@ -202,14 +306,14 @@ private fun StrictLockState(
             Icon(painterResource(R.drawable.lock_open_fill0), null, Modifier.size(16.dp))
             Spacer(Modifier.width(6.dp))
             Text(
-                "${AppConfig.STRICT_LOCK_TIER.label} (còn $remainingUses/${AppConfig.STRICT_LOCK_DAILY_UNLOCKS} lượt hôm nay)",
+                "${strictTier.label} (còn $remainingUses/${dailyQuota} lượt hôm nay)",
                 fontWeight = FontWeight.Bold,
                 fontSize = 13.sp
             )
         }
     } else {
         Text(
-            text = "Đã dùng hết ${AppConfig.STRICT_LOCK_DAILY_UNLOCKS} lượt mở khoá hôm nay",
+            text = "Đã dùng hết ${dailyQuota} lượt mở khoá hôm nay",
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
             color = Color(0xFFB71C1C),

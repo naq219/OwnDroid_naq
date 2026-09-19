@@ -39,12 +39,15 @@ import kotlin.random.Random
 @Serializable
 object RandomPasswordScreenV2
 
-private const val TOTAL_ATTEMPTS = 20 // For settings access
+private const val TOTAL_ATTEMPTS = 20 // Fallback local; giá trị hiệu lực = AppConfig.getAttemptsForSettings() (remote)
 
 @Composable
-fun RandomPasswordScreenV2(onSucceed: () -> Unit) {
+fun RandomPasswordScreenV2(onSucceed: () -> Unit, onOpenConfig: () -> Unit = {}) {
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
+    // Cấu hình online (fallback local): số lần nhập để vào Settings + độ dài mã
+    val totalAttempts = AppConfig.getAttemptsForSettings().coerceIn(1, 999)
+    val challengeLength = AppConfig.getChallengeLength().coerceIn(4, 32)
     
     // Password state
     var randomString by remember { mutableStateOf("") }
@@ -112,12 +115,12 @@ fun RandomPasswordScreenV2(onSucceed: () -> Unit) {
     
     // Generate new challenge
     fun generateNewChallenge() {
-        randomString = (1..10).map { 
-            "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789".random() 
+        randomString = (1..challengeLength).map {
+            "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789".random()
         }.joinToString("")
         input = ""
         isError = false
-        message = "Còn ${TOTAL_ATTEMPTS - successfulAttempts} lần để vào Settings"
+        message = "Còn ${totalAttempts - successfulAttempts} lần để vào Settings"
     }
     
     // Check password
@@ -129,7 +132,7 @@ fun RandomPasswordScreenV2(onSucceed: () -> Unit) {
         
         if (input.equals(randomString, ignoreCase = true)) {
             successfulAttempts++
-            if (successfulAttempts >= TOTAL_ATTEMPTS) {
+            if (successfulAttempts >= totalAttempts) {
                 focusManager.clearFocus()
                 SP.lastAuthTime = System.currentTimeMillis()
                 onSucceed()
@@ -230,7 +233,18 @@ fun RandomPasswordScreenV2(onSucceed: () -> Unit) {
         )
         
         Spacer(Modifier.height(16.dp))
-        
+
+        // ========== REMOTE CONFIG (xem + sync, chưa login vẫn dùng được) ==========
+        OutlinedButton(
+            onClick = onOpenConfig,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Text("⚙️ Xem cấu hình & Sync", fontWeight = FontWeight.Bold)
+        }
+
+        Spacer(Modifier.height(16.dp))
+
         // ========== UNLOCK STATUS CARD ==========
         UnlockStatusCard(
             successfulAttempts = successfulAttempts,
@@ -243,8 +257,8 @@ fun RandomPasswordScreenV2(onSucceed: () -> Unit) {
             strictTodayUsed = strictTodayUsed,
             onUnlock = { tier ->
                 // During strict lock, check the daily quota before unlocking
-                if (isStrictLock && TempUnlockManager.getStrictTodayUsed() >= AppConfig.STRICT_LOCK_DAILY_UNLOCKS) {
-                    context.popToast("Đã dùng hết ${AppConfig.STRICT_LOCK_DAILY_UNLOCKS} lượt mở khoá hôm nay!")
+                if (isStrictLock && TempUnlockManager.getStrictTodayUsed() >= AppConfig.getStrictDailyUnlocks()) {
+                    context.popToast("Đã dùng hết ${AppConfig.getStrictDailyUnlocks()} lượt mở khoá hôm nay!")
                     return@UnlockStatusCard
                 }
                 TempUnlockManager.activateWithTier(context, tier)
@@ -269,6 +283,17 @@ fun RandomPasswordScreenV2(onSucceed: () -> Unit) {
                 } else {
                     context.popToast("Đã khóa!")
                 }
+            },
+            onExtendBlock = { extraMinutes ->
+                val remaining = TempUnlockManager.extendBlockPeriod(extraMinutes)
+                isBlocked = true
+                remainingBlockMillis = remaining
+                val label = when {
+                    extraMinutes % 1440 == 0L -> "${extraMinutes / 1440} ngày"
+                    extraMinutes % 60 == 0L -> "${extraMinutes / 60} giờ"
+                    else -> "$extraMinutes phút"
+                }
+                context.popToast("Đã khoá thêm $label!")
             }
         )
         
@@ -307,7 +332,7 @@ fun RandomPasswordScreenV2(onSucceed: () -> Unit) {
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Nhập đủ $TOTAL_ATTEMPTS lần để vào Settings và dừng",
+                        text = "Nhập đủ $totalAttempts lần để vào Settings và dừng",
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -337,8 +362,8 @@ fun RandomPasswordScreenV2(onSucceed: () -> Unit) {
         // ========== APP LIST SECTION ==========
         // Always show
         // Add: Always allowed
-        // Remove: Only allowed after 50 attempts
-        val canRemoveApps = successfulAttempts >= TOTAL_ATTEMPTS
+        // Remove: Only allowed after enough attempts (remote-configurable)
+        val canRemoveApps = successfulAttempts >= totalAttempts
         AppListSection(
             actionsEnabled = true,
             canRemove = canRemoveApps

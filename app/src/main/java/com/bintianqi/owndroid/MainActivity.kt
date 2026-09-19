@@ -245,6 +245,8 @@ import com.bintianqi.owndroid.dpm.WorkProfileScreen
 import com.bintianqi.owndroid.dpm.dhizukuErrorStatus
 import com.bintianqi.owndroid.ui.Animations
 import com.bintianqi.owndroid.ui.RandomPasswordScreenV2
+import com.bintianqi.owndroid.ui.RemoteConfigViewer
+import com.bintianqi.owndroid.ui.RemoteConfigViewerScreen
 import com.bintianqi.owndroid.ui.theme.OwnDroidTheme
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.Serializable
@@ -341,8 +343,9 @@ fun Home(vm: MyViewModel, onLock: () -> Unit) {
     fun navigateUp() { navController.navigateUp() }
     fun navigate(destination: Any) { navController.navigate(destination) }
     LaunchedEffect(Unit) {
-        // 1) Require login on app open if last auth older than 1 hour
-        val needsLogin = System.currentTimeMillis() - SP.lastAuthTime >= 10 * 60 * 1000
+        // 1) Require login on app open if last auth older than remote reloginMinutes (fallback 10p)
+        val reloginMs = AppConfig.getReloginMinutes().coerceIn(1, 1440) * 60 * 1000
+        val needsLogin = System.currentTimeMillis() - SP.lastAuthTime >= reloginMs
         if (needsLogin) {
             navController.navigate(Login) {
                 popUpTo<Home> { inclusive = true }
@@ -370,11 +373,17 @@ fun Home(vm: MyViewModel, onLock: () -> Unit) {
     ) {
         composable<Home> { HomeScreen(::navigate) }
         composable<Login> {
-            RandomPasswordScreenV2 {
-                navController.navigate(Settings) {
-                    popUpTo<Login> { inclusive = true }
-                }
-            }
+            RandomPasswordScreenV2(
+                onSucceed = {
+                    navController.navigate(Settings) {
+                        popUpTo<Login> { inclusive = true }
+                    }
+                },
+                onOpenConfig = { navController.navigate(RemoteConfigViewer) }
+            )
+        }
+        composable<RemoteConfigViewer> {
+            RemoteConfigViewerScreen(::navigateUp)
         }
         composable<WorkModes> {
             WorkModesScreen(it.toRoute(), ::navigateUp, {

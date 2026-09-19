@@ -55,6 +55,10 @@ class SharedPrefs(context: Context) {
     var strictLockUsedToday by IntSharedPref("lock.strict_used_today", 0)
     // Date (yyyy-MM-dd) of the last day the daily counter was used, for lazy reset
     var strictLockLastUsedDate by StringSharedPref("lock.strict_last_used_date")
+    // Remote config (cấu hình online từ web block_site) — app chỉ đọc + sync
+    var remoteConfigJson by StringSharedPref("remote_config.json")
+    var remoteConfigUrl by StringSharedPref("remote_config.url")
+    var remoteConfigUpdatedAt by LongSharedPref("remote_config.updated_at", 0L)
 }
 
 private class BooleanSharedPref(val key: String, val defValue: Boolean = false): ReadWriteProperty<SharedPrefs, Boolean> {

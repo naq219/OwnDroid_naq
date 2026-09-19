@@ -232,7 +232,9 @@ object TempUnlockManager {
      */
     fun isNightMode(): Boolean {
         val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
-        return hour >= NIGHT_START_HOUR || hour < NIGHT_END_HOUR
+        val start = AppConfig.getNightStartHour()
+        val end = AppConfig.getNightEndHour()
+        return if (start <= end) hour in start until end else hour >= start || hour < end
     }
     
     /**
@@ -245,12 +247,14 @@ object TempUnlockManager {
         val currentHour = cal.get(java.util.Calendar.HOUR_OF_DAY)
         val currentMinute = cal.get(java.util.Calendar.MINUTE)
         
-        val minutesRemaining = if (currentHour >= NIGHT_START_HOUR) {
-            // After 22:00 - calculate to midnight + hours until 7:00
-            ((24 - currentHour - 1) * 60) + (60 - currentMinute) + (NIGHT_END_HOUR * 60)
+        val start = AppConfig.getNightStartHour()
+        val end = AppConfig.getNightEndHour()
+        val minutesRemaining = if (currentHour >= start) {
+            // After night start - calculate to midnight + hours until end
+            ((24 - currentHour - 1) * 60) + (60 - currentMinute) + (end * 60)
         } else {
-            // Before 7:00 - calculate to 7:00
-            ((NIGHT_END_HOUR - currentHour - 1) * 60) + (60 - currentMinute)
+            // Before end - calculate to end
+            ((end - currentHour - 1) * 60) + (60 - currentMinute)
         }
         return minutesRemaining
     }
@@ -548,6 +552,20 @@ object TempUnlockManager {
     fun clearBlockPeriod() {
         SP.blockEndTime = 0L
     }
+
+    /**
+     * Tự nguyện khoá thêm: cộng thêm thời gian vào block hiện tại.
+     * Nếu đang block thì nối tiếp từ giờ kết thúc cũ, nếu không thì tính từ bây giờ.
+     * @return thời gian block còn lại (ms) sau khi cộng
+     */
+    fun extendBlockPeriod(extraMinutes: Long): Long {
+        val safe = extraMinutes.coerceIn(1, 43200) // tối đa 30 ngày
+        val now = System.currentTimeMillis()
+        val base = maxOf(SP.blockEndTime, now)
+        SP.blockEndTime = base + TimeUnit.MINUTES.toMillis(safe)
+        Log.d(TAG, "Block extended by $safe minutes")
+        return SP.blockEndTime - now
+    }
     
     // ============= STRICT LOCK (KHOÁ CHẶT CHẼ) =============
 
@@ -651,8 +669,8 @@ object TempUnlockManager {
     fun activateWithTier(context: Context, tier: AppConfig.UnlockTier): Int {
         // During strict lock, only the strict tier is allowed and the daily quota applies
         if (isStrictLockActive()) {
-            if (tier.unlockMinutes != AppConfig.STRICT_LOCK_TIER.unlockMinutes ||
-                getStrictTodayUsed() >= AppConfig.STRICT_LOCK_DAILY_UNLOCKS) {
+            if (tier.unlockMinutes != AppConfig.getStrictTier().unlockMinutes ||
+                getStrictTodayUsed() >= AppConfig.getStrictDailyUnlocks()) {
                 Log.w(TAG, "activateWithTier blocked by strict lock (tier=${tier.label})")
                 return 0
             }
