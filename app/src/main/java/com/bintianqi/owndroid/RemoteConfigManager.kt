@@ -107,7 +107,7 @@ object RemoteConfigManager {
             hardlockApps = hard.toList(),
             nightWhitelistExtra = cleanPkgs(c.nightWhitelistExtra),
             vpn = RemoteVpn(
-                `package` = c.vpn.`package`.trim().takeIf { pkgRegex.matches(it) } ?: "naq.dns",
+                `package` = c.vpn.`package`.trim().takeIf { pkgRegex.matches(it) } ?: AppConfig.VPN_PACKAGE,
                 allowlist = cleanPkgs(c.vpn.allowlist)
             )
         )

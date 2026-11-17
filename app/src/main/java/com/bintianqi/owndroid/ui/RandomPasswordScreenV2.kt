@@ -399,7 +399,7 @@ fun RandomPasswordScreenV2(onSucceed: () -> Unit, onOpenConfig: () -> Unit = {})
                     val dpm = com.bintianqi.owndroid.Privilege.DPM
                     val admin = com.bintianqi.owndroid.Privilege.DAR
                     val myPackage = context.packageName
-                    val dnsPackage = "naq.dns"
+                    val dnsPackage = AppConfig.getRemoteVpnPackage()
 
                     // 1. Block Date/Time
                     dpm.addUserRestriction(admin, android.os.UserManager.DISALLOW_CONFIG_DATE_TIME)

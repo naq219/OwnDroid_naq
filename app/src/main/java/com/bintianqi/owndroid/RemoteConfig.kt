@@ -35,7 +35,7 @@ data class RemoteLogin(
 
 @Serializable
 data class RemoteVpn(
-    val `package`: String = "naq.dns",
+    val `package`: String = "naq.dns2",
     val allowlist: List<String> = emptyList()
 )
 
@@ -70,7 +70,7 @@ data class OwndroidRemoteConfig(
     val nightWhitelistExtra: List<String> = listOf(
         "com.android.vending",
         "com.vng.inputmethod.labankey",
-        "naq.dns",
+        "naq.dns2",
         "vn.com.techcombank.bb.app",
         "com.vnid",
         "vn.com.vetc.app",
@@ -94,7 +94,7 @@ data class OwndroidRemoteConfig(
         "com.automattic.simplenote"
     ),
     val vpn: RemoteVpn = RemoteVpn(
-        `package` = "naq.dns",
+        `package` = "naq.dns2",
         allowlist = listOf("com.facebook.adsmanager", "com.facebook.pages.app")
     )
 )

@@ -223,6 +223,39 @@ object TempUnlockManager {
             unsuspendApp(pkg)
         }
     }
+
+    private fun isPackageInstalled(context: Context, packageName: String): Boolean = try {
+        context.packageManager.getPackageInfo(packageName, 0)
+        true
+    } catch (_: Exception) {
+        false
+    }
+
+    /**
+     * Khôi phục always-on VPN theo web config (naq.dns2).
+     * Không ném exception để không làm hỏng các bước relock phía sau.
+     */
+    private fun restoreAlwaysOnVpn(context: Context, allowlist: Collection<String?>) {
+        val candidates = listOf(
+            AppConfig.getRemoteVpnPackage().trim(),
+            AppConfig.VPN_PACKAGE
+        ).filter { it.isNotEmpty() }.distinct()
+
+        val vpnPackage = candidates.firstOrNull { isPackageInstalled(context, it) }
+        if (vpnPackage == null) {
+            Log.w(TAG, "No installed VPN package found among $candidates, skip restoring VPN")
+            return
+        }
+
+        try {
+            val safeAllowlist: MutableSet<String?> = HashSet(allowlist)
+            safeAllowlist.add(vpnPackage)
+            Privilege.DPM.setAlwaysOnVpnPackage(Privilege.DAR, vpnPackage, false, safeAllowlist)
+            Log.d(TAG, "Always-on VPN restored: $vpnPackage")
+        } catch (e: Exception) {
+            Log.e(TAG, "Restore always-on VPN failed for $vpnPackage", e)
+        }
+    }
     
     // ============= NIGHT MODE =============
     
@@ -362,7 +395,8 @@ object TempUnlockManager {
                 val hardlockApps = getHardlockApps()
                 // Strict lock forces night-rest behavior 24/7 for its whole duration
                 val isNight = isNightMode() || isStrictLockActive()
-                val vpnPackage = AppConfig.VPN_PACKAGE
+                val vpnPackage = AppConfig.getRemoteVpnPackage().trim()
+                    .ifEmpty { AppConfig.VPN_PACKAGE }
                 
                 if (isNight) {
                     // NIGHT MODE LOCK: Block ALL user apps except Whitelist
@@ -401,10 +435,7 @@ object TempUnlockManager {
                     
                     // Night Mode VPN Setup: Lockdown DISABLED as requested
                     Log.d(TAG, "Setting Night Mode VPN (Lockdown=FALSE)...")
-                    val allowlist: MutableSet<String?> = HashSet(whitelist)
-                    // Ensure vpn package itself isn't blocked by VPN config logic (though it's the provider)
-                    allowlist.add(vpnPackage) 
-                    Privilege.DPM.setAlwaysOnVpnPackage(Privilege.DAR, vpnPackage, false, allowlist)
+                    restoreAlwaysOnVpn(context, whitelist)
                     
                 } else {
                     // DAY MODE LOCK: Block Softlock + Hardlock, Unblock others
@@ -438,34 +469,60 @@ object TempUnlockManager {
                         Privilege.DPM.setPackagesSuspended(Privilege.DAR, appsToUnsuspend.toTypedArray(), false)
                     }
                     
-                    // Day Mode VPN Setup: Standard Allowlist, Lockdown TRUE
+                    // Day Mode VPN Setup: Standard Allowlist, Lockdown FALSE
                     Log.d(TAG, "Setting Day Mode VPN (Lockdown=FALSE)...")
-                    val allowlist: MutableSet<String?> = HashSet(AppConfig.VPN_ALLOWLIST)
-                    Privilege.DPM.setAlwaysOnVpnPackage(Privilege.DAR, vpnPackage, false, allowlist)
+                    val allowlist: Set<String?> =
+                        AppConfig.VPN_ALLOWLIST + AppConfig.getRemoteVpnAllowlist()
+                    restoreAlwaysOnVpn(context, allowlist)
                 }
 
                 // COMMON ACTIONS FOR BOTH MODES
-                
+                // Mỗi bước tách try/catch riêng: VPN lỗi không được chặn các bước còn lại.
+
                 // 2. Re-add install apps restriction
-                Log.d(TAG, "Adding DISALLOW_INSTALL_APPS restriction...")
-                Privilege.DPM.addUserRestriction(Privilege.DAR, UserManager.DISALLOW_INSTALL_APPS)
-                
+                try {
+                    Log.d(TAG, "Adding DISALLOW_INSTALL_APPS restriction...")
+                    Privilege.DPM.addUserRestriction(Privilege.DAR, UserManager.DISALLOW_INSTALL_APPS)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Add DISALLOW_INSTALL_APPS failed", e)
+                }
+
                 // 3. Re-add VPN config restriction
-                Privilege.DPM.addUserRestriction(Privilege.DAR, UserManager.DISALLOW_CONFIG_VPN)
-                
+                try {
+                    Privilege.DPM.addUserRestriction(Privilege.DAR, UserManager.DISALLOW_CONFIG_VPN)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Add DISALLOW_CONFIG_VPN failed", e)
+                }
+
                 // 4. Re-add private DNS config restriction
-                Privilege.DPM.addUserRestriction(Privilege.DAR, UserManager.DISALLOW_CONFIG_PRIVATE_DNS)
-                
+                try {
+                    Privilege.DPM.addUserRestriction(Privilege.DAR, UserManager.DISALLOW_CONFIG_PRIVATE_DNS)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Add DISALLOW_CONFIG_PRIVATE_DNS failed", e)
+                }
+
                 // 5. Block date/time config to prevent bypassing night mode
-                Privilege.DPM.addUserRestriction(Privilege.DAR, UserManager.DISALLOW_CONFIG_DATE_TIME)
+                try {
+                    Privilege.DPM.addUserRestriction(Privilege.DAR, UserManager.DISALLOW_CONFIG_DATE_TIME)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Add DISALLOW_CONFIG_DATE_TIME failed", e)
+                }
 
                 // 6. Block uninstall for VPN app
-                Privilege.DPM.setUninstallBlocked(Privilege.DAR, vpnPackage, true)
-                
+                try {
+                    Privilege.DPM.setUninstallBlocked(Privilege.DAR, vpnPackage, true)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Block uninstall VPN app failed", e)
+                }
+
                 // 7. Disable user control for VPN app
-                val current = Privilege.DPM.getUserControlDisabledPackages(Privilege.DAR)
-                if (!current.contains(vpnPackage)) {
-                    Privilege.DPM.setUserControlDisabledPackages(Privilege.DAR, current.plus(vpnPackage))
+                try {
+                    val current = Privilege.DPM.getUserControlDisabledPackages(Privilege.DAR)
+                    if (!current.contains(vpnPackage)) {
+                        Privilege.DPM.setUserControlDisabledPackages(Privilege.DAR, current.plus(vpnPackage))
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Disable user control VPN app failed", e)
                 }
             }
             
@@ -479,6 +536,9 @@ object TempUnlockManager {
         } catch (e: Exception) {
             Log.e(TAG, "========== deactivateTempUnlock FAILED ==========")
             Log.e(TAG, "Error: ${e.message}", e)
+            // Không giữ trạng thái unlock cũ nếu relock gặp lỗi bất ngờ
+            SP.tempUnlockEndTime = 0L
+            SP.isTempUnlockActive = false
         }
     }
     

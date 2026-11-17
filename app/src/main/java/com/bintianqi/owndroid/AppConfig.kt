@@ -12,7 +12,7 @@ object AppConfig {
     // ============= TEMPORARY FULL UNLOCK (BẢN MỞ KHOÁ TẠM THỜI) =============
     // Đặt true để build bản mở khoá hoàn toàn: bỏ login, gỡ suspend/hide toàn bộ app,
     // xoá block/strict, huỷ workers khoá lại. XONG VIỆC ĐẶT LẠI false VÀ BUILD LẠI!
-    const val FULL_UNLOCK_BUILD = true
+    const val FULL_UNLOCK_BUILD = false
 
     // ============= UNLOCK TIER =============
     
@@ -58,7 +58,7 @@ object AppConfig {
     
     // ============= VPN =============
     
-    const val VPN_PACKAGE = "naq.dns"
+    const val VPN_PACKAGE = "naq.dns2"
     
     val VPN_ALLOWLIST: Set<String?> = setOf(
         "com.facebook.adsmanager",
@@ -80,7 +80,7 @@ object AppConfig {
         // Add additional critical apps if needed
          whitelist.add("com.android.vending") // Google Play Store
          whitelist.add("com.vng.inputmethod.labankey")
-         whitelist.add("naq.dns")
+         whitelist.add(getRemoteVpnPackage())
          whitelist.add("vn.com.techcombank.bb.app")
          whitelist.add("com.vnid")
          whitelist.add("vn.com.vetc.app")
