@@ -8,7 +8,12 @@ package com.bintianqi.owndroid
  * - Night Mode (22:00 - 07:00): 1→5p (block 15p), 25→bypass
  */
 object AppConfig {
-    
+
+    // ============= TEMPORARY FULL UNLOCK (BẢN MỞ KHOÁ TẠM THỜI) =============
+    // Đặt true để build bản mở khoá hoàn toàn: bỏ login, gỡ suspend/hide toàn bộ app,
+    // xoá block/strict, huỷ workers khoá lại. XONG VIỆC ĐẶT LẠI false VÀ BUILD LẠI!
+    const val FULL_UNLOCK_BUILD = true
+
     // ============= UNLOCK TIER =============
     
     /**

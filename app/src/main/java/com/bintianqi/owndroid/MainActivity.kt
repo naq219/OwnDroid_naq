@@ -343,14 +343,19 @@ fun Home(vm: MyViewModel, onLock: () -> Unit) {
     fun navigateUp() { navController.navigateUp() }
     fun navigate(destination: Any) { navController.navigate(destination) }
     LaunchedEffect(Unit) {
-        // 1) Require login on app open if last auth older than remote reloginMinutes (fallback 10p)
-        val reloginMs = AppConfig.getReloginMinutes().coerceIn(1, 1440) * 60 * 1000
-        val needsLogin = System.currentTimeMillis() - SP.lastAuthTime >= reloginMs
-        if (needsLogin) {
-            navController.navigate(Login) {
-                popUpTo<Home> { inclusive = true }
+        // TEMPORARY FULL UNLOCK: gỡ toàn bộ khoá, bỏ qua login
+        if (AppConfig.FULL_UNLOCK_BUILD) {
+            try { TempUnlockManager.fullUnlockNow(context) } catch (_: Exception) {}
+        } else {
+            // 1) Require login on app open if last auth older than remote reloginMinutes (fallback 10p)
+            val reloginMs = AppConfig.getReloginMinutes().coerceIn(1, 1440) * 60 * 1000
+            val needsLogin = System.currentTimeMillis() - SP.lastAuthTime >= reloginMs
+            if (needsLogin) {
+                navController.navigate(Login) {
+                    popUpTo<Home> { inclusive = true }
+                }
+                return@LaunchedEffect
             }
-            return@LaunchedEffect
         }
         // 2) If privilege not activated, go to WorkModes
         if(!Privilege.status.value.activated) {
@@ -535,6 +540,7 @@ fun Home(vm: MyViewModel, onLock: () -> Unit) {
     }
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
+            if (AppConfig.FULL_UNLOCK_BUILD) return@LifecycleEventObserver // TEMPORARY: bỏ khoá app
             val needsLogin = System.currentTimeMillis() - SP.lastAuthTime >= 10 * 60 * 1000
             if (
                 (event == Lifecycle.Event.ON_CREATE && needsLogin && !SP.lockPasswordHash.isNullOrEmpty()) ||

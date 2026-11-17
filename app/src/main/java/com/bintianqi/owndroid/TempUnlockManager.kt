@@ -554,6 +554,52 @@ object TempUnlockManager {
     }
 
     /**
+     * TEMPORARY: mở khoá hoàn toàn (dùng cho bản FULL_UNLOCK_BUILD).
+     * - Huỷ workers có thể khoá lại từ bản cũ (relock / strict end)
+     * - Unsuspend + unhide TOÀN BỘ app (kể cả hardlock)
+     * - Xoá restrictions + reset mọi trạng thái khoá trong SP
+     */
+    fun fullUnlockNow(context: Context): Int {
+        var count = 0
+        try {
+            val appCtx = context.applicationContext
+            try { WorkManager.getInstance(appCtx).cancelUniqueWork(WORK_NAME) } catch (_: Exception) {}
+            try { WorkManager.getInstance(appCtx).cancelUniqueWork(STRICT_LOCK_WORK_NAME) } catch (_: Exception) {}
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                val all = try { getAllUserInstalledApps(appCtx) } catch (e: Exception) {
+                    Log.e(TAG, "fullUnlock list apps failed", e); emptyList()
+                }
+                if (all.isNotEmpty()) {
+                    try {
+                        val failed = Privilege.DPM.setPackagesSuspended(Privilege.DAR, all.toTypedArray(), false)
+                        if (failed.isNotEmpty()) Log.w(TAG, "fullUnlock unsuspend failed: ${failed.contentToString()}")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "fullUnlock unsuspend failed", e)
+                    }
+                }
+                for (pkg in all) {
+                    try { if (unhideApp(pkg)) count++ } catch (_: Exception) {}
+                }
+                try { Privilege.DPM.clearUserRestriction(Privilege.DAR, UserManager.DISALLOW_INSTALL_APPS) } catch (_: Exception) {}
+                try { Privilege.DPM.setAlwaysOnVpnPackage(Privilege.DAR, null, false) } catch (_: Exception) {}
+                try { Privilege.DPM.clearUserRestriction(Privilege.DAR, UserManager.DISALLOW_CONFIG_VPN) } catch (_: Exception) {}
+                try { Privilege.DPM.clearUserRestriction(Privilege.DAR, UserManager.DISALLOW_CONFIG_PRIVATE_DNS) } catch (_: Exception) {}
+            }
+            SP.isTempUnlockActive = false
+            SP.tempUnlockEndTime = 0L
+            SP.blockEndTime = 0L
+            SP.lastUsedBlockMinutes = 0L
+            SP.strictLockEndTime = 0L
+            SP.strictLockDays = 0
+            SP.lastAuthTime = System.currentTimeMillis()
+            Log.d(TAG, "FULL UNLOCK done, unhidden $count apps")
+        } catch (e: Exception) {
+            Log.e(TAG, "fullUnlock failed", e)
+        }
+        return count
+    }
+
+    /**
      * Tự nguyện khoá thêm: cộng thêm thời gian vào block hiện tại.
      * Nếu đang block thì nối tiếp từ giờ kết thúc cũ, nếu không thì tính từ bây giờ.
      * @return thời gian block còn lại (ms) sau khi cộng
