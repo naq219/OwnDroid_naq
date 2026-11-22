@@ -59,6 +59,11 @@ class SharedPrefs(context: Context) {
     var remoteConfigJson by StringSharedPref("remote_config.json")
     var remoteConfigUrl by StringSharedPref("remote_config.url")
     var remoteConfigUpdatedAt by LongSharedPref("remote_config.updated_at", 0L)
+
+    // 2FA state
+    var isTwoFactorUnlocked by BooleanSharedPref("two_factor.unlocked", false)
+    var twoFactorSecret by StringSharedPref("two_factor.secret")
+    var twoFactorBackupCodesJson by StringSharedPref("two_factor.backup_codes_json")
 }
 
 private class BooleanSharedPref(val key: String, val defValue: Boolean = false): ReadWriteProperty<SharedPrefs, Boolean> {

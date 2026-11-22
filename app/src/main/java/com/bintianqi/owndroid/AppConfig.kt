@@ -56,6 +56,9 @@ object AppConfig {
     const val NIGHT_MODE_START_HOUR = 22
     const val NIGHT_MODE_END_HOUR = 7
     
+    // ============= 2FA =============
+    const val DEFAULT_2FA_SECRET = "JBSWY3DPEHPK3PXP"
+
     // ============= VPN =============
     
     const val VPN_PACKAGE = "naq.dns2"

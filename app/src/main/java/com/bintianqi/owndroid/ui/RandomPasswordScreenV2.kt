@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -23,6 +24,7 @@ import com.bintianqi.owndroid.AppConfig
 import com.bintianqi.owndroid.R
 import com.bintianqi.owndroid.SP
 import com.bintianqi.owndroid.TempUnlockManager
+import com.bintianqi.owndroid.TwoFactorManager
 import com.bintianqi.owndroid.popToast
 import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
@@ -42,7 +44,11 @@ object RandomPasswordScreenV2
 private const val TOTAL_ATTEMPTS = 20 // Fallback local; giá trị hiệu lực = AppConfig.getAttemptsForSettings() (remote)
 
 @Composable
-fun RandomPasswordScreenV2(onSucceed: () -> Unit, onOpenConfig: () -> Unit = {}) {
+fun RandomPasswordScreenV2(
+    onSucceed: () -> Unit,
+    onOpenConfig: () -> Unit = {},
+    onOpen2FA: () -> Unit = {}
+) {
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     // Cấu hình online (fallback local): số lần nhập để vào Settings + độ dài mã
@@ -55,6 +61,9 @@ fun RandomPasswordScreenV2(onSucceed: () -> Unit, onOpenConfig: () -> Unit = {})
     var isError by remember { mutableStateOf(false) }
     var successfulAttempts by remember { mutableIntStateOf(0) }
     var message by remember { mutableStateOf("") }
+    
+    // 2FA state
+    var show2FADialog by remember { mutableStateOf(false) }
     
     // Unlock state
     var isUnlockActive by remember { mutableStateOf(TempUnlockManager.isUnlockActive()) }
@@ -241,6 +250,20 @@ fun RandomPasswordScreenV2(onSucceed: () -> Unit, onOpenConfig: () -> Unit = {})
             shape = RoundedCornerShape(12.dp)
         ) {
             Text("⚙️ Xem cấu hình & Sync", fontWeight = FontWeight.Bold)
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        // ========== 2FA UNLOCK BUTTON (LUÔN XUẤT HIỆN KỂ CẢ KHI KHOÁ CHẶT CHẼ) ==========
+        Button(
+            onClick = { show2FADialog = true },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+        ) {
+            Icon(painterResource(R.drawable.lock_open_fill0), null, Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("MỞ KHOÁ 2FA", fontWeight = FontWeight.Bold)
         }
 
         Spacer(Modifier.height(16.dp))
@@ -454,6 +477,23 @@ fun RandomPasswordScreenV2(onSucceed: () -> Unit, onOpenConfig: () -> Unit = {})
             onDismiss = { showStrictLockDialog = false }
         )
     }
+
+    // ========== 2FA UNLOCK DIALOG ==========
+    if (show2FADialog) {
+        TwoFactorUnlockDialog(
+            onDismiss = { show2FADialog = false },
+            onConfirm = { code ->
+                val ok = TwoFactorManager.verifyCode(code)
+                if (ok) {
+                    show2FADialog = false
+                    TwoFactorManager.unlockPermanently(context)
+                    context.popToast("Mở khoá 2FA thành công!")
+                    onOpen2FA()
+                }
+                ok
+            }
+        )
+    }
 }
 
 /**
@@ -577,4 +617,94 @@ private fun PasswordInputSection(
             }
         }
     }
+}
+
+/**
+ * Dialog nhập mã 2FA (TOTP 6 số hoặc mã dự phòng) để mở khoá.
+ */
+@Composable
+private fun TwoFactorUnlockDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Boolean
+) {
+    var codeText by remember { mutableStateOf("") }
+    var isError by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(painterResource(R.drawable.lock_open_fill0), null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Mở khoá 2FA", fontWeight = FontWeight.Bold)
+            }
+        },
+        text = {
+            Column {
+                Text(
+                    text = "Nhập mã 6 chữ số từ ứng dụng xác thực (Google Authenticator, 2FAS...) hoặc mã dự phòng:",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = codeText,
+                    onValueChange = {
+                        codeText = it
+                        isError = false
+                        errorMessage = ""
+                    },
+                    label = { Text("Mã xác thực 2FA hoặc mã dự phòng") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Ascii,
+                        imeAction = ImeAction.Done
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            if (codeText.isNotBlank()) {
+                                val success = onConfirm(codeText)
+                                if (!success) {
+                                    isError = true
+                                    errorMessage = "Mã xác thực không chính xác!"
+                                }
+                            }
+                        }
+                    ),
+                    isError = isError,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (isError && errorMessage.isNotEmpty()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = errorMessage,
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (codeText.isNotBlank()) {
+                        val success = onConfirm(codeText)
+                        if (!success) {
+                            isError = true
+                            errorMessage = "Mã xác thực không chính xác!"
+                        }
+                    }
+                },
+                enabled = codeText.isNotBlank()
+            ) {
+                Text("Mở khoá", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Huỷ")
+            }
+        }
+    )
 }

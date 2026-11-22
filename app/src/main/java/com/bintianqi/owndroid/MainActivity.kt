@@ -247,6 +247,8 @@ import com.bintianqi.owndroid.ui.Animations
 import com.bintianqi.owndroid.ui.RandomPasswordScreenV2
 import com.bintianqi.owndroid.ui.RemoteConfigViewer
 import com.bintianqi.owndroid.ui.RemoteConfigViewerScreen
+import com.bintianqi.owndroid.ui.TwoFactorManagement
+import com.bintianqi.owndroid.ui.TwoFactorManagementScreen
 import com.bintianqi.owndroid.ui.theme.OwnDroidTheme
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.Serializable
@@ -346,6 +348,12 @@ fun Home(vm: MyViewModel, onLock: () -> Unit) {
         // TEMPORARY FULL UNLOCK: gỡ toàn bộ khoá, bỏ qua login
         if (AppConfig.FULL_UNLOCK_BUILD) {
             try { TempUnlockManager.fullUnlockNow(context) } catch (_: Exception) {}
+        } else if (SP.isTwoFactorUnlocked) {
+            // Đang mở khoá 2FA vĩnh viễn: vào thẳng màn hình Quản lý 2FA
+            navController.navigate(TwoFactorManagement) {
+                popUpTo<Home> { inclusive = true }
+            }
+            return@LaunchedEffect
         } else {
             // 1) Require login on app open if last auth older than remote reloginMinutes (fallback 10p)
             val reloginMs = AppConfig.getReloginMinutes().coerceIn(1, 1440) * 60 * 1000
@@ -384,7 +392,22 @@ fun Home(vm: MyViewModel, onLock: () -> Unit) {
                         popUpTo<Login> { inclusive = true }
                     }
                 },
-                onOpenConfig = { navController.navigate(RemoteConfigViewer) }
+                onOpenConfig = { navController.navigate(RemoteConfigViewer) },
+                onOpen2FA = {
+                    navController.navigate(TwoFactorManagement) {
+                        popUpTo<Login> { inclusive = true }
+                    }
+                }
+            )
+        }
+        composable<TwoFactorManagement> {
+            TwoFactorManagementScreen(
+                onOpenHome = { navController.navigate(Home) },
+                onRelocked = {
+                    navController.navigate(Login) {
+                        popUpTo<TwoFactorManagement> { inclusive = true }
+                    }
+                }
             )
         }
         composable<RemoteConfigViewer> {
