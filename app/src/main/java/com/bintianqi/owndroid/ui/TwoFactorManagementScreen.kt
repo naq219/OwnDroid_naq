@@ -39,6 +39,10 @@ fun TwoFactorManagementScreen(
 
     var showRelockConfirmDialog by remember { mutableStateOf(false) }
     var showNewCodesConfirmDialog by remember { mutableStateOf(false) }
+    var showEditSecretDialog by remember { mutableStateOf(false) }
+    var showRandomSecretConfirmDialog by remember { mutableStateOf(false) }
+    var customSecretInput by remember { mutableStateOf("") }
+    var customSecretError by remember { mutableStateOf<String?>(null) }
 
     fun copyToClipboard(text: String, label: String) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -208,6 +212,39 @@ fun TwoFactorManagementScreen(
                             Text("Copy OTPAuth", fontSize = 12.sp)
                         }
                     }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                customSecretInput = secretKey
+                                customSecretError = null
+                                showEditSecretDialog = true
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                        ) {
+                            Icon(painterResource(R.drawable.edit_fill0), null, Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Nhập Key mới", fontSize = 12.sp)
+                        }
+
+                        Button(
+                            onClick = { showRandomSecretConfirmDialog = true },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+                        ) {
+                            Icon(painterResource(R.drawable.refresh_fill0), null, Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Tạo Key mới", fontSize = 12.sp)
+                        }
+                    }
                 }
             }
 
@@ -344,13 +381,13 @@ fun TwoFactorManagementScreen(
         AlertDialog(
             onDismissRequest = { showNewCodesConfirmDialog = false },
             title = { Text("Tạo mới mã dự phòng", fontWeight = FontWeight.Bold) },
-            text = { Text("Toàn bộ các mã dự phòng cũ sẽ bị vô hiệu hoá và thay bằng 8 mã mới. Bạn có chắc không?") },
+            text = { Text("Toàn bộ các mã dự phòng cũ sẽ bị vô hiệu hoá và thay bằng 16 mã mới. Bạn có chắc không?") },
             confirmButton = {
                 TextButton(
                     onClick = {
                         showNewCodesConfirmDialog = false
                         backupCodes = TwoFactorManager.generateNewBackupCodes()
-                        context.popToast("Đã tạo mới 8 mã dự phòng!")
+                        context.popToast("Đã tạo mới 16 mã dự phòng!")
                     }
                 ) {
                     Text("Tạo mới", fontWeight = FontWeight.Bold)
@@ -358,6 +395,85 @@ fun TwoFactorManagementScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showNewCodesConfirmDialog = false }) {
+                    Text("Huỷ")
+                }
+            }
+        )
+    }
+
+    // ========== CONFIRM RANDOM SECRET KEY DIALOG ==========
+    if (showRandomSecretConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showRandomSecretConfirmDialog = false },
+            title = { Text("Tạo mới Secret Key", fontWeight = FontWeight.Bold) },
+            text = {
+                Text("Khoá 2FA hiện tại sẽ bị thay bằng một khoá mới ngẫu nhiên. Bạn sẽ cần cấu hình lại mã này vào ứng dụng Authenticator. Bạn có chắc không?")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showRandomSecretConfirmDialog = false
+                        secretKey = TwoFactorManager.generateNewSecretKey()
+                        context.popToast("Đã tạo mới Secret Key thành công!")
+                    }
+                ) {
+                    Text("Tạo mới", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRandomSecretConfirmDialog = false }) {
+                    Text("Huỷ")
+                }
+            }
+        )
+    }
+
+    // ========== EDIT CUSTOM SECRET KEY DIALOG ==========
+    if (showEditSecretDialog) {
+        AlertDialog(
+            onDismissRequest = { showEditSecretDialog = false },
+            title = { Text("Đổi Secret Key 2FA", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "Nhập khoá bí mật Base32 tuỳ chỉnh của bạn (chỉ gồm các chữ cái A-Z và chữ số 2-7, tối thiểu 16 ký tự):",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = customSecretInput,
+                        onValueChange = {
+                            customSecretInput = it.filter { char -> !char.isWhitespace() }.uppercase()
+                            customSecretError = null
+                        },
+                        label = { Text("Secret Key (Base32)") },
+                        isError = customSecretError != null,
+                        supportingText = customSecretError?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val cleaned = customSecretInput.trim().uppercase()
+                        if (TwoFactorManager.isValidBase32(cleaned)) {
+                            TwoFactorManager.setSecretKey(cleaned)
+                            secretKey = TwoFactorManager.getSecretKey()
+                            showEditSecretDialog = false
+                            context.popToast("Đã lưu Secret Key mới!")
+                        } else {
+                            customSecretError = "Khoá không hợp lệ! Chỉ dùng A-Z, 2-7 và tối thiểu 16 ký tự."
+                        }
+                    }
+                ) {
+                    Text("Lưu", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditSecretDialog = false }) {
                     Text("Huỷ")
                 }
             }

@@ -19,7 +19,7 @@ object TwoFactorManager {
     private const val TAG = "TwoFactorManager"
     private const val TOTP_TIME_STEP_SECONDS = 30L
     private const val TOTP_DIGITS = 6
-    private const val BACKUP_CODES_COUNT = 8
+    private const val BACKUP_CODES_COUNT = 16
 
     // Bảng ký tự Base32 (RFC 4648)
     private const val BASE32_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
@@ -38,8 +38,40 @@ object TwoFactorManager {
     }
 
     /**
+     * Kiểm tra chuỗi có phải là Base32 hợp lệ (A-Z, 2-7, tối thiểu 8 ký tự).
+     */
+    fun isValidBase32(candidate: String): Boolean {
+        val clean = candidate.trim().replace(" ", "").replace("-", "").replace("=", "").uppercase()
+        return clean.length >= 8 && clean.all { BASE32_CHARS.contains(it) }
+    }
+
+    /**
+     * Cập nhật Secret Key tuỳ chỉnh do người dùng nhập.
+     */
+    fun setSecretKey(customSecret: String): Boolean {
+        val clean = customSecret.trim().replace(" ", "").replace("-", "").replace("=", "").uppercase()
+        if (!isValidBase32(clean)) return false
+        SP.twoFactorSecret = clean
+        Log.d(TAG, "Đã cập nhật Secret Key mới: $clean")
+        return true
+    }
+
+    /**
+     * Tạo ngẫu nhiên một Secret Key Base32 mới (16 ký tự).
+     */
+    fun generateNewSecretKey(): String {
+        val random = SecureRandom()
+        val newSecret = (1..16).map {
+            BASE32_CHARS[random.nextInt(BASE32_CHARS.length)]
+        }.joinToString("")
+        SP.twoFactorSecret = newSecret
+        Log.d(TAG, "Đã tạo ngẫu nhiên Secret Key mới: $newSecret")
+        return newSecret
+    }
+
+    /**
      * Lấy danh sách mã dự phòng khả dụng.
-     * Nếu chưa có thì tự động sinh 8 mã mới.
+     * Nếu chưa có thì tự động sinh 16 mã mới.
      */
     fun getBackupCodes(): List<String> {
         val json = SP.twoFactorBackupCodesJson
