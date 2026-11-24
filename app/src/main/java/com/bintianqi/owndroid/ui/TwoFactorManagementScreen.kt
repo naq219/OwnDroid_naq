@@ -381,13 +381,13 @@ fun TwoFactorManagementScreen(
         AlertDialog(
             onDismissRequest = { showNewCodesConfirmDialog = false },
             title = { Text("Tạo mới mã dự phòng", fontWeight = FontWeight.Bold) },
-            text = { Text("Toàn bộ các mã dự phòng cũ sẽ bị vô hiệu hoá và thay bằng 16 mã mới. Bạn có chắc không?") },
+            text = { Text("Toàn bộ các mã dự phòng cũ sẽ bị vô hiệu hoá và thay bằng 8 mã mới. Bạn có chắc không?") },
             confirmButton = {
                 TextButton(
                     onClick = {
                         showNewCodesConfirmDialog = false
                         backupCodes = TwoFactorManager.generateNewBackupCodes()
-                        context.popToast("Đã tạo mới 16 mã dự phòng!")
+                        context.popToast("Đã tạo mới 8 mã dự phòng!")
                     }
                 ) {
                     Text("Tạo mới", fontWeight = FontWeight.Bold)

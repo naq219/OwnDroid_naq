@@ -19,7 +19,7 @@ object TwoFactorManager {
     private const val TAG = "TwoFactorManager"
     private const val TOTP_TIME_STEP_SECONDS = 30L
     private const val TOTP_DIGITS = 6
-    private const val BACKUP_CODES_COUNT = 16
+    private const val BACKUP_CODES_COUNT = 8
 
     // Bảng ký tự Base32 (RFC 4648)
     private const val BASE32_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
@@ -71,7 +71,7 @@ object TwoFactorManager {
 
     /**
      * Lấy danh sách mã dự phòng khả dụng.
-     * Nếu chưa có thì tự động sinh 16 mã mới.
+     * Nếu chưa có thì tự động sinh 8 mã mới.
      */
     fun getBackupCodes(): List<String> {
         val json = SP.twoFactorBackupCodesJson

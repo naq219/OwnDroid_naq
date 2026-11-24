@@ -247,6 +247,8 @@ import com.bintianqi.owndroid.ui.Animations
 import com.bintianqi.owndroid.ui.RandomPasswordScreenV2
 import com.bintianqi.owndroid.ui.RemoteConfigViewer
 import com.bintianqi.owndroid.ui.RemoteConfigViewerScreen
+import com.bintianqi.owndroid.ui.TouchUnlock
+import com.bintianqi.owndroid.ui.TouchUnlockScreen
 import com.bintianqi.owndroid.ui.TwoFactorManagement
 import com.bintianqi.owndroid.ui.TwoFactorManagementScreen
 import com.bintianqi.owndroid.ui.theme.OwnDroidTheme
@@ -397,6 +399,9 @@ fun Home(vm: MyViewModel, onLock: () -> Unit) {
                     navController.navigate(TwoFactorManagement) {
                         popUpTo<Login> { inclusive = true }
                     }
+                },
+                onOpenTouchUnlock = {
+                    navController.navigate(TouchUnlock)
                 }
             )
         }
@@ -408,6 +413,11 @@ fun Home(vm: MyViewModel, onLock: () -> Unit) {
                         popUpTo<TwoFactorManagement> { inclusive = true }
                     }
                 }
+            )
+        }
+        composable<TouchUnlock> {
+            TouchUnlockScreen(
+                onNavigateBack = { navController.navigateUp() }
             )
         }
         composable<RemoteConfigViewer> {

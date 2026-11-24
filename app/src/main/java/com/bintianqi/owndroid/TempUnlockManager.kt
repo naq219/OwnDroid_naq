@@ -800,6 +800,15 @@ object TempUnlockManager {
     }
     
     /**
+     * Kích hoạt mở khoá với thời lượng tuỳ chỉnh (phút) - dùng cho Touch Unlock.
+     */
+    fun activateCustomUnlock(context: Context, durationMinutes: Long, blockMinutesAfterExpire: Long = 0L): Int {
+        clearBlockPeriod()
+        SP.lastUsedBlockMinutes = blockMinutesAfterExpire
+        return activateUnlock(context, durationMinutes)
+    }
+    
+    /**
      * Deactivate unlock with optional block time
      */
     fun deactivateWithBlock(context: Context, blockMinutes: Long = 0L) {

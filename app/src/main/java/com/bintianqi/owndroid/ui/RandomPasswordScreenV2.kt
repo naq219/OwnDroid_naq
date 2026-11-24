@@ -47,7 +47,8 @@ private const val TOTAL_ATTEMPTS = 20 // Fallback local; giá trị hiệu lực
 fun RandomPasswordScreenV2(
     onSucceed: () -> Unit,
     onOpenConfig: () -> Unit = {},
-    onOpen2FA: () -> Unit = {}
+    onOpen2FA: () -> Unit = {},
+    onOpenTouchUnlock: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
@@ -254,16 +255,34 @@ fun RandomPasswordScreenV2(
 
         Spacer(Modifier.height(8.dp))
 
-        // ========== 2FA UNLOCK BUTTON (LUÔN XUẤT HIỆN KỂ CẢ KHI KHOÁ CHẶT CHẼ) ==========
-        Button(
-            onClick = { show2FADialog = true },
+        // ========== 2FA & TOUCH UNLOCK BUTTONS (LUÔN XUẤT HIỆN KỂ CẢ KHI KHOÁ CHẶT CHẼ) ==========
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Icon(painterResource(R.drawable.lock_open_fill0), null, Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("MỞ KHOÁ 2FA", fontWeight = FontWeight.Bold)
+            // Nút trái: Mở khoá 2FA
+            Button(
+                onClick = { show2FADialog = true },
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Icon(painterResource(R.drawable.lock_open_fill0), null, Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Mở khoá 2FA", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            }
+
+            // Nút phải: Touch Unlock
+            Button(
+                onClick = onOpenTouchUnlock,
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+            ) {
+                Icon(painterResource(R.drawable.fingerprint_fill0), null, Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Touch Unlock", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            }
         }
 
         Spacer(Modifier.height(16.dp))
